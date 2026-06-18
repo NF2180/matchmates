@@ -9,7 +9,7 @@ export interface Ground {
 export interface Player {
   id: string
   name: string
-  mobile_number: string
+  mobile_number: string | null
   photo_url: string | null
   created_at: string
 }

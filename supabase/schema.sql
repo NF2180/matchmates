@@ -23,10 +23,17 @@ create table if not exists grounds (
 create table if not exists players (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  mobile_number text not null unique,
+  mobile_number text,
   photo_url text,
   created_at timestamptz not null default now()
 );
+
+-- Partial unique index: enforces uniqueness only when a real mobile number
+-- is present, so multiple players can have no mobile number, and guest
+-- players (synthetic "guest_..." values) are excluded from the check.
+create unique index if not exists players_mobile_number_unique
+  on players (mobile_number)
+  where mobile_number is not null and mobile_number not like 'guest\_%';
 
 -- ----------------------------------------------------------------
 -- MATCHES

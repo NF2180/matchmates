@@ -87,6 +87,10 @@ export default function Home() {
           </Link>
         ))}
       </div>
+
+      <Link to="/admin/players" className="text-xs text-zinc-600 text-center mt-8 mb-2">
+        Admin · Manage Players
+      </Link>
     </div>
   )
 }

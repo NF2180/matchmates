@@ -64,28 +64,33 @@ export default function JoinMatch() {
       setError('Name is required')
       return
     }
-    if (!/^[0-9]{10}$/.test(mobile.trim())) {
-      setError('Enter a valid 10-digit mobile number')
+    const trimmedMobile = mobile.trim()
+    if (trimmedMobile && !/^[0-9]{10}$/.test(trimmedMobile)) {
+      setError('Mobile number must be 10 digits, or leave it blank')
       return
     }
 
     setSubmitting(true)
     try {
-      // check if a player with this mobile already exists
-      const { data: existing } = await supabase
-        .from('players')
-        .select('*')
-        .eq('mobile_number', mobile.trim())
-        .maybeSingle()
+      let resolvedPlayer: Player | null = null
 
-      let resolvedPlayer: Player
+      // Only attempt dedup-by-mobile if a mobile number was actually given
+      if (trimmedMobile) {
+        const { data: existing } = await supabase
+          .from('players')
+          .select('*')
+          .eq('mobile_number', trimmedMobile)
+          .maybeSingle()
 
-      if (existing) {
-        resolvedPlayer = existing as Player
-      } else {
+        if (existing) {
+          resolvedPlayer = existing as Player
+        }
+      }
+
+      if (!resolvedPlayer) {
         const { data: created, error: createError } = await supabase
           .from('players')
-          .insert({ name: name.trim(), mobile_number: mobile.trim() })
+          .insert({ name: name.trim(), mobile_number: trimmedMobile || null })
           .select()
           .single()
         if (createError) throw createError
@@ -173,7 +178,7 @@ export default function JoinMatch() {
             type="tel"
             value={mobile}
             onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-            placeholder="Mobile number"
+            placeholder="Mobile number (optional)"
             className="input"
           />
           {error && <div className="text-red-400 text-sm text-center">{error}</div>}
