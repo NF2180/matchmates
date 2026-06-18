@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0f1115;
+  color: #e8eaed;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100svh;
+  max-width: 480px;
+  margin: 0 auto;
+  background: #0f1115;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+@layer components {
+  .input {
+    @apply bg-zinc-900 border border-zinc-700 rounded-lg px-3.5 py-2.5 text-base text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 w-full;
+  }
+}
