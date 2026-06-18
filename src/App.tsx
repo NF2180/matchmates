@@ -5,6 +5,7 @@ import MatchDetail from './pages/MatchDetail'
 import AttendanceDashboard from './pages/AttendanceDashboard'
 import JoinMatch from './pages/JoinMatch'
 import AdminPlayers from './pages/AdminPlayers'
+import TeamSetup from './pages/TeamSetup'
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
       <Route path="/create" element={<CreateMatch />} />
       <Route path="/match/:id" element={<MatchDetail />} />
       <Route path="/match/:id/attendance" element={<AttendanceDashboard />} />
+      <Route path="/match/:id/teams" element={<TeamSetup />} />
       <Route path="/join/:token" element={<JoinMatch />} />
       <Route path="/admin/players" element={<AdminPlayers />} />
     </Routes>

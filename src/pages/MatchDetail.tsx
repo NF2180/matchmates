@@ -119,6 +119,17 @@ export default function MatchDetail() {
         <span className="text-zinc-500">→</span>
       </Link>
 
+      <Link
+        to={`/match/${match.id}/teams`}
+        className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6 flex items-center justify-between active:bg-zinc-800"
+      >
+        <div>
+          <div className="font-semibold text-white text-sm">Teams & Toss</div>
+          <div className="text-xs text-zinc-500 mt-0.5">Assign teams, roles, and who bats first</div>
+        </div>
+        <span className="text-zinc-500">→</span>
+      </Link>
+
       <div className="grid grid-cols-3 gap-2 mb-6">
         <StatBox label="Playing" count={playing.length} color="emerald" />
         <StatBox label="Not Playing" count={notPlaying.length} color="zinc" />

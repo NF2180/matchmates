@@ -29,6 +29,7 @@ export interface Match {
   match_date: string
   match_time: string | null
   status: MatchStatus
+  batting_first_team_id: string | null
   created_at: string
   // joined data (populated client-side via select)
   ground?: Ground | null
@@ -46,4 +47,26 @@ export interface Participation {
   responded_at: string | null
   created_at: string
   player?: Player
+}
+
+export type TeamSide = 'A' | 'B'
+
+export interface Team {
+  id: string
+  match_id: string
+  name: string
+  side: TeamSide
+  created_at: string
+}
+
+export type PlayerRole = 'captain' | 'vice_captain' | 'wicket_keeper' | 'substitute'
+
+export interface TeamMember {
+  id: string
+  match_id: string
+  participation_id: string
+  team_id: string | null // null = bench
+  role: PlayerRole | null
+  created_at: string
+  participation?: Participation
 }
