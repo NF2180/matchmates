@@ -9,7 +9,7 @@ import {
   setPlayerRole,
   setBattingFirstTeam,
 } from '../lib/teams'
-import { parseTeamAssignmentText } from '../lib/parseTeamText'
+import VoiceTeamAssign, { type VoiceAssignment } from '../components/VoiceTeamAssign'
 import type { Match, Participation, Team, TeamMember, PlayerRole } from '../types'
 
 const ROLE_LABELS: Record<PlayerRole, string> = {
@@ -29,11 +29,7 @@ export default function TeamSetup() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [showPaste, setShowPaste] = useState(false)
-  const [pasteText, setPasteText] = useState('')
-  const [pasteError, setPasteError] = useState<string | null>(null)
-  const [applyingPaste, setApplyingPaste] = useState(false)
-
+  const [showVoice, setShowVoice] = useState(false)
   const [editingTeamName, setEditingTeamName] = useState<string | null>(null)
   const [teamNameInput, setTeamNameInput] = useState('')
 
@@ -115,42 +111,12 @@ export default function TeamSetup() {
     if (id) await loadAll(id)
   }
 
-  async function applyParsedAssignments(parsed: ReturnType<typeof parseTeamAssignmentText>) {
-    if (!id || !teamA || !teamB) return
-    for (const item of parsed) {
-      if (!item.matchedPlayer) continue
-      const teamId = item.side === 'A' ? teamA.id : teamB.id
-      await assignToTeam(id, item.matchedPlayer.id, teamId)
+  async function handleVoiceAssignments(assignments: VoiceAssignment[]) {
+    if (!id) return
+    for (const a of assignments) {
+      await assignToTeam(id, a.participation.id, a.teamId)
     }
     await loadAll(id)
-  }
-
-  async function handlePasteApply() {
-    setPasteError(null)
-    if (!teamA || !teamB) return
-
-    const candidates = participants.map((p) => ({ id: p.id, name: p.player?.name ?? '' }))
-    const parsed = parseTeamAssignmentText(pasteText, candidates)
-
-    if (parsed.length === 0) {
-      setPasteError('Could not find any "Team A" / "Team B" sections. Use commas between multi-word names.')
-      return
-    }
-
-    const unmatched = parsed.filter((p) => !p.matchedPlayer)
-
-    setApplyingPaste(true)
-    await applyParsedAssignments(parsed)
-    setApplyingPaste(false)
-
-    if (unmatched.length > 0) {
-      setPasteError(
-        `Applied. Could not match: ${unmatched.map((u) => u.rawName).join(', ')} — assign manually below.`
-      )
-    } else {
-      setShowPaste(false)
-      setPasteText('')
-    }
   }
 
   if (loading) {
@@ -180,38 +146,21 @@ export default function TeamSetup() {
         <p className="text-sm text-zinc-400">{match.match_name}</p>
       </header>
 
-      {!showPaste ? (
-        <button
-          onClick={() => setShowPaste(true)}
-          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm mb-6"
-        >
-          📋 Paste Team Assignment
-        </button>
+      {showVoice && teamA && teamB ? (
+        <VoiceTeamAssign
+          teamA={teamA}
+          teamB={teamB}
+          participants={participants}
+          onAssignments={(assignments) => handleVoiceAssignments(assignments)}
+          onClose={() => setShowVoice(false)}
+        />
       ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-white">Paste Team Assignment</h3>
-            <button onClick={() => setShowPaste(false)} className="text-zinc-500 text-xs">✕</button>
-          </div>
-          <p className="text-xs text-zinc-500 mb-2">
-            e.g. "Team A Raj Nitin Vipul" then "Team B Rahul Siraj Amit". Use commas between
-            multi-word names.
-          </p>
-          <textarea
-            value={pasteText}
-            onChange={(e) => setPasteText(e.target.value)}
-            placeholder={'Team A\nRaj, Nitin, Vipul\n\nTeam B\nRahul, Siraj, Amit'}
-            className="input min-h-[120px] resize-none mb-2"
-          />
-          {pasteError && <div className="text-amber-400 text-xs mb-2">{pasteError}</div>}
-          <button
-            onClick={handlePasteApply}
-            disabled={!pasteText.trim() || applyingPaste}
-            className="w-full bg-emerald-500 active:bg-emerald-600 disabled:opacity-50 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm"
-          >
-            {applyingPaste ? 'Applying…' : 'Apply'}
-          </button>
-        </div>
+        <button
+          onClick={() => setShowVoice(true)}
+          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm mb-6 flex items-center justify-center gap-2"
+        >
+          🎙 Voice Team Assignment
+        </button>
       )}
 
       <TeamColumn
