@@ -46,6 +46,9 @@ export default function LiveScoring() {
   const [showEndInnings, setShowEndInnings] = useState(false)
   const [ending, setEnding] = useState(false)
   const [byePickerType, setByePickerType] = useState<'bye' | 'leg_bye' | null>(null)
+  const [extraBallPicker, setExtraBallPicker] = useState<'wide' | 'no_ball' | null>(null)
+  const [extraBallRuns, setExtraBallRuns] = useState(0)
+  const [extraBallWicket, setExtraBallWicket] = useState(false)
 
   // Sequence counter for deliveries
   const sequenceRef = useRef(0)
@@ -286,6 +289,43 @@ export default function LiveScoring() {
     })
   }
 
+  function openExtraBallPicker(type: 'wide' | 'no_ball') {
+    setExtraBallPicker(type)
+    setExtraBallRuns(0)
+    setExtraBallWicket(false)
+  }
+
+  function confirmExtraBallNoWicket() {
+    if (!extraBallPicker) return
+    const isWide = extraBallPicker === 'wide'
+    void recordBall({
+      // Wide: any runs taken are part of the wide extra, not batter runs.
+      // No-ball: the +1 penalty is fixed extra; runs are credited to the batter.
+      batterRuns: isWide ? 0 : extraBallRuns,
+      extraRuns: isWide ? 1 + extraBallRuns : 1,
+      extraType: extraBallPicker,
+      isLegal: false,
+      isWicket: false,
+    })
+    setExtraBallPicker(null)
+  }
+
+  function handleExtraBallWicketResult(result: WicketResult) {
+    if (!extraBallPicker) return
+    const isWide = extraBallPicker === 'wide'
+    setExtraBallPicker(null)
+    void recordBall({
+      batterRuns: isWide ? 0 : result.batterRuns,
+      extraRuns: isWide ? 1 + result.batterRuns : 1,
+      extraType: extraBallPicker,
+      isLegal: false,
+      isWicket: true,
+      wicketType: result.wicketType,
+      dismissedPlayerId: result.dismissedPlayerId,
+      fielderId: result.fielderId,
+    })
+  }
+
   function confirmNextBowler() {
     if (!nextBowlerId) return
     const cs = currentState()
@@ -352,12 +392,20 @@ export default function LiveScoring() {
       <div className="bg-zinc-900 px-4 pt-6 pb-4">
         <div className="flex items-start justify-between mb-1">
           <Link to={`/match/${matchId}`} className="text-zinc-500 text-xs">← Match</Link>
-          <button
-            onClick={() => setShowEndInnings(true)}
-            className="text-xs text-zinc-500 border border-zinc-700 rounded px-2 py-1"
-          >
-            End Innings
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/match/${matchId}/scorecard`}
+              className="text-xs text-zinc-300 border border-zinc-700 rounded px-2 py-1"
+            >
+              📊 Scorecard
+            </Link>
+            <button
+              onClick={() => setShowEndInnings(true)}
+              className="text-xs text-zinc-500 border border-zinc-700 rounded px-2 py-1"
+            >
+              End Innings
+            </button>
+          </div>
         </div>
 
         <div className="text-center mt-2">
@@ -539,6 +587,71 @@ export default function LiveScoring() {
         </div>
       )}
 
+      {/* Wide / No Ball: pick additional runs, optionally mark a wicket */}
+      {extraBallPicker && !extraBallWicket && (
+        <div className="bg-zinc-900 border-b border-zinc-700 px-4 py-3">
+          <p className="text-sm font-semibold text-white mb-2">
+            {extraBallPicker === 'wide' ? 'Wide' : 'No Ball'} —{' '}
+            {extraBallPicker === 'wide' ? 'runs taken (byes)?' : 'runs off the bat?'}
+          </p>
+          <div className="grid grid-cols-6 gap-1.5 mb-3">
+            {[0, 1, 2, 3, 4, 6].map((r) => (
+              <button
+                key={r}
+                onClick={() => setExtraBallRuns(r)}
+                className={`py-3 rounded-lg text-base font-semibold border ${
+                  extraBallRuns === r
+                    ? 'bg-emerald-500 text-zinc-950 border-emerald-500'
+                    : 'bg-zinc-800 text-white border-zinc-700'
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 mb-2">
+            <button
+              onClick={confirmExtraBallNoWicket}
+              className="py-3 rounded-lg bg-emerald-500 active:bg-emerald-600 text-zinc-950 font-semibold text-sm"
+            >
+              Confirm ({1 + extraBallRuns} run{1 + extraBallRuns !== 1 ? 's' : ''})
+            </button>
+            <button
+              onClick={() => setExtraBallWicket(true)}
+              className="py-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 font-semibold text-sm"
+            >
+              + Wicket
+            </button>
+          </div>
+          <button
+            onClick={() => setExtraBallPicker(null)}
+            className="w-full bg-zinc-800 text-zinc-400 rounded-lg py-2 text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Wide / No Ball wicket: filtered dismissal types per cricket law,
+          further restricted to Run Out only if this ball is itself a free hit */}
+      {extraBallPicker && extraBallWicket && striker && nonStriker && (
+        <WicketModal
+          striker={striker}
+          nonStriker={nonStriker}
+          fieldingPlayers={bowlingPlayers}
+          allowedTypes={
+            cs.next_ball_is_free_hit
+              ? ['run_out']
+              : extraBallPicker === 'no_ball'
+                ? ['run_out']
+                : ['run_out', 'stumped']
+          }
+          runsLabel={extraBallPicker === 'wide' ? 'Runs taken (byes) before the wicket' : 'Runs off the bat before the wicket'}
+          onConfirm={handleExtraBallWicketResult}
+          onCancel={() => setExtraBallWicket(false)}
+        />
+      )}
+
       {/* Scoring pad */}
       <div className="flex-1 px-4 pt-4 pb-6 flex flex-col gap-3">
         {/* Run buttons */}
@@ -549,7 +662,7 @@ export default function LiveScoring() {
               <button
                 key={r}
                 onClick={() => recordBall({ batterRuns: r, extraRuns: 0, extraType: null, isLegal: true, isWicket: false })}
-                disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
+                disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType || !!extraBallPicker}
                 className={`py-4 rounded-xl text-xl font-bold border transition-colors disabled:opacity-40 ${
                   r === 4
                     ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 active:bg-emerald-500/20'
@@ -570,26 +683,26 @@ export default function LiveScoring() {
           <div className="grid grid-cols-4 gap-1.5">
             <ExtraButton
               label="Wide"
-              sublabel="+1"
-              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
-              onClick={() => recordBall({ batterRuns: 0, extraRuns: 1, extraType: 'wide', isLegal: false, isWicket: false })}
+              sublabel="tap to score"
+              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType || !!extraBallPicker}
+              onClick={() => openExtraBallPicker('wide')}
             />
             <ExtraButton
               label="No Ball"
-              sublabel="+1"
-              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
-              onClick={() => recordBall({ batterRuns: 0, extraRuns: 1, extraType: 'no_ball', isLegal: false, isWicket: false })}
+              sublabel="tap to score"
+              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType || !!extraBallPicker}
+              onClick={() => openExtraBallPicker('no_ball')}
             />
             <ExtraButton
               label="Bye"
               sublabel="runs?"
-              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
+              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType || !!extraBallPicker}
               onClick={() => setByePickerType('bye')}
             />
             <ExtraButton
               label="Leg Bye"
               sublabel="runs?"
-              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
+              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType || !!extraBallPicker}
               onClick={() => setByePickerType('leg_bye')}
             />
           </div>
@@ -599,7 +712,7 @@ export default function LiveScoring() {
         <div className="grid grid-cols-2 gap-1.5">
           <button
             onClick={() => setShowWicket(true)}
-            disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType || !striker || !nonStriker}
+            disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType || !!extraBallPicker || !striker || !nonStriker}
             className="py-3.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/30 font-bold text-base active:bg-red-500/20 disabled:opacity-40"
           >
             Wicket
@@ -620,6 +733,7 @@ export default function LiveScoring() {
           striker={striker}
           nonStriker={nonStriker}
           fieldingPlayers={bowlingPlayers}
+          allowedTypes={cs.next_ball_is_free_hit ? ['run_out'] : undefined}
           onConfirm={handleWicketResult}
           onCancel={() => setShowWicket(false)}
         />

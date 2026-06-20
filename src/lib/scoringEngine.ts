@@ -160,7 +160,9 @@ export function computeInningsState(
     } else if (d.extra_type === 'no_ball') {
       state.extras.no_balls += d.extra_runs
       state.extras.total += d.extra_runs
-      bowler.runs += d.extra_runs
+      // Bowler concedes the no-ball penalty AND any runs the batter hits off it —
+      // the whole delivery is the bowler's fault, so all runs count against their figures.
+      bowler.runs += d.extra_runs + d.batter_runs
       bowler.no_balls++
       // batter runs on no-ball still credited to batter
       const batter = batterMap.get(d.striker_id)!

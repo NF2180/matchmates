@@ -6,6 +6,8 @@ interface Props {
   striker: Player
   nonStriker: Player
   fieldingPlayers: Player[]
+  allowedTypes?: WicketType[] // if provided, only these dismissal types are selectable
+  runsLabel?: string // context-specific label for the runs-before-wicket picker
   onConfirm: (result: WicketResult) => void
   onCancel: () => void
 }
@@ -27,13 +29,17 @@ const WICKET_TYPES: Array<{ type: WicketType; label: string; needsFielder: boole
   { type: 'retired_hurt', label: 'Retired Hurt',  needsFielder: false, canDismissNonStriker: false },
 ]
 
-export default function WicketModal({ striker, nonStriker, fieldingPlayers, onConfirm, onCancel }: Props) {
+export default function WicketModal({ striker, nonStriker, fieldingPlayers, allowedTypes, runsLabel, onConfirm, onCancel }: Props) {
   const [wicketType, setWicketType] = useState<WicketType | null>(null)
   const [dismissedId, setDismissedId] = useState<string>(striker.id)
   const [fielderId, setFielderId] = useState<string>('')
   const [batterRuns, setBatterRuns] = useState(0)
 
-  const selected = WICKET_TYPES.find((w) => w.type === wicketType)
+  const visibleTypes = allowedTypes
+    ? WICKET_TYPES.filter((w) => allowedTypes.includes(w.type))
+    : WICKET_TYPES
+
+  const selected = visibleTypes.find((w) => w.type === wicketType)
 
   function handleConfirm() {
     if (!wicketType) return
@@ -58,7 +64,7 @@ export default function WicketModal({ striker, nonStriker, fieldingPlayers, onCo
 
         {/* Batter runs scored on this delivery */}
         <div className="mb-4">
-          <p className="text-xs text-zinc-400 mb-2">Runs scored on this delivery (before wicket)</p>
+          <p className="text-xs text-zinc-400 mb-2">{runsLabel ?? 'Runs scored on this delivery (before wicket)'}</p>
           <div className="flex gap-2">
             {[0, 1, 2, 3, 4, 6].map((r) => (
               <button
@@ -79,7 +85,7 @@ export default function WicketModal({ striker, nonStriker, fieldingPlayers, onCo
         {/* Dismissal type */}
         <p className="text-xs text-zinc-400 mb-2">How out?</p>
         <div className="grid grid-cols-2 gap-2 mb-4">
-          {WICKET_TYPES.map((w) => (
+          {visibleTypes.map((w) => (
             <button
               key={w.type}
               onClick={() => {
