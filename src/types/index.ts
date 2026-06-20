@@ -30,8 +30,9 @@ export interface Match {
   match_time: string | null
   status: MatchStatus
   batting_first_team_id: string | null
+  current_innings_id: string | null
   created_at: string
-  // joined data (populated client-side via select)
+  // joined data
   ground?: Ground | null
 }
 
@@ -65,8 +66,53 @@ export interface TeamMember {
   id: string
   match_id: string
   participation_id: string
-  team_id: string | null // null = bench
+  team_id: string | null
   role: PlayerRole | null
   created_at: string
   participation?: Participation
+}
+
+export interface Innings {
+  id: string
+  match_id: string
+  innings_number: number
+  batting_team_id: string
+  bowling_team_id: string
+  status: 'active' | 'completed'
+  target: number | null
+  overs_limit: number
+  created_at: string
+}
+
+export type ExtraType = 'wide' | 'no_ball' | 'bye' | 'leg_bye' | 'overthrow'
+export type WicketType =
+  | 'bowled'
+  | 'caught'
+  | 'lbw'
+  | 'run_out'
+  | 'stumped'
+  | 'hit_wicket'
+  | 'retired_hurt'
+
+export interface DeliveryRecord {
+  id: string
+  match_id: string
+  innings_id: string
+  innings_number: number
+  over_number: number
+  ball_number: number
+  is_legal: boolean
+  striker_id: string
+  non_striker_id: string
+  bowler_id: string
+  batter_runs: number
+  extra_runs: number
+  total_runs: number
+  extra_type: ExtraType | null
+  is_free_hit: boolean
+  is_wicket: boolean
+  wicket_type: WicketType | null
+  dismissed_player_id: string | null
+  fielder_id: string | null
+  created_at: string
 }

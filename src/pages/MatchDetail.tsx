@@ -121,7 +121,7 @@ export default function MatchDetail() {
 
       <Link
         to={`/match/${match.id}/teams`}
-        className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6 flex items-center justify-between active:bg-zinc-800"
+        className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-3 flex items-center justify-between active:bg-zinc-800"
       >
         <div>
           <div className="font-semibold text-white text-sm">Teams & Toss</div>
@@ -129,6 +129,31 @@ export default function MatchDetail() {
         </div>
         <span className="text-zinc-500">→</span>
       </Link>
+
+      {/* Scoring entry points */}
+      {match.status === 'live' && match.current_innings_id ? (
+        <Link
+          to={`/match/${match.id}/scoring/${match.current_innings_id}`}
+          className="w-full bg-emerald-500 text-zinc-950 font-bold rounded-xl py-3.5 text-center text-base mb-6 flex items-center justify-center gap-2"
+        >
+          🏏 Resume Live Scoring
+        </Link>
+      ) : match.status === 'created' && match.batting_first_team_id ? (
+        <Link
+          to={`/match/${match.id}/innings/1`}
+          className="w-full bg-emerald-500 text-zinc-950 font-bold rounded-xl py-3.5 text-center text-base mb-6 flex items-center justify-center gap-2"
+        >
+          🏏 Start Innings 1
+        </Link>
+      ) : match.status === 'created' ? (
+        <div className="bg-zinc-900 border border-zinc-700 border-dashed rounded-xl py-3 text-center text-xs text-zinc-500 mb-6">
+          Complete Team Setup and pick who bats first to start scoring
+        </div>
+      ) : match.status === 'completed' ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl py-3 text-center text-xs text-zinc-500 mb-6">
+          Match completed
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-3 gap-2 mb-6">
         <StatBox label="Playing" count={playing.length} color="emerald" />

@@ -1,0 +1,677 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useParams, useLocation, useNavigate, Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { computeInningsState, canBowlNextOver, oversDisplay } from '../lib/scoringEngine'
+import type { ExtraType, Delivery, WicketType, InningsState, BatterStats, BowlerStats } from '../lib/scoringEngine'
+import { loadDeliveries, saveDelivery, deleteLastDelivery, completeInnings, completeMatch } from '../lib/scoringDb'
+import type { InningsRow } from '../lib/scoringDb'
+import WicketModal from '../components/WicketModal'
+import type { WicketResult } from '../components/WicketModal'
+import type { Player } from '../types'
+
+type OverEndState = 'idle' | 'needs_bowler' | 'confirmed'
+
+export default function LiveScoring() {
+  const { id: matchId, inningsId } = useParams<{ id: string; inningsId: string }>()
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // Initial striker/non-striker/bowler passed from InningsSetup via router state
+  const initState = location.state as {
+    strikerId: string
+    nonStrikerId: string
+    bowlerId: string
+  } | null
+
+  const [innings, setInnings] = useState<InningsRow | null>(null)
+  const [deliveries, setDeliveries] = useState<Delivery[]>([])
+  const [state, setState] = useState<InningsState | null>(null)
+  const [battingPlayers, setBattingPlayers] = useState<Player[]>([])
+  const [bowlingPlayers, setBowlingPlayers] = useState<Player[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  // Striker/non-striker/bowler — initialised from router state, then managed locally
+  const [strikerId, setStrikerId] = useState(initState?.strikerId ?? '')
+  const [nonStrikerId, setNonStrikerId] = useState(initState?.nonStrikerId ?? '')
+  const [bowlerId, setBowlerId] = useState(initState?.bowlerId ?? '')
+
+  // UI state
+  const [showWicket, setShowWicket] = useState(false)
+  const [overEndState, setOverEndState] = useState<OverEndState>('idle')
+  const [nextBowlerId, setNextBowlerId] = useState('')
+  const [showNextBatter, setShowNextBatter] = useState(false)
+  const [nextBatterId, setNextBatterId] = useState('')
+  const [showEndInnings, setShowEndInnings] = useState(false)
+  const [ending, setEnding] = useState(false)
+  const [byePickerType, setByePickerType] = useState<'bye' | 'leg_bye' | null>(null)
+
+  // Sequence counter for deliveries
+  const sequenceRef = useRef(0)
+
+  const loadAll = useCallback(async () => {
+    if (!inningsId || !matchId) return
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { data: innData } = await supabase
+        .from('innings')
+        .select('*')
+        .eq('id', inningsId)
+        .single()
+      if (!innData) throw new Error('Innings not found')
+      const inn = innData as InningsRow
+      setInnings(inn)
+
+      // Load teams' players
+      const { data: batMembers } = await supabase
+        .from('team_members')
+        .select('participation:participation(player:players(*))')
+        .eq('team_id', inn.batting_team_id)
+
+      const { data: bowlMembers } = await supabase
+        .from('team_members')
+        .select('participation:participation(player:players(*))')
+        .eq('team_id', inn.bowling_team_id)
+
+      const extract = (members: unknown[]): Player[] =>
+        (members as Array<{ participation: { player: Player } }>)
+          .map((m) => m.participation?.player)
+          .filter((p): p is Player => !!p)
+
+      setBattingPlayers(extract(batMembers ?? []))
+      setBowlingPlayers(extract(bowlMembers ?? []))
+
+      const rawDeliveries = await loadDeliveries(inningsId)
+      sequenceRef.current = rawDeliveries.length
+
+      // Map DB rows to engine Delivery shape
+      const mapped: Delivery[] = rawDeliveries.map((d) => ({
+        id: d.id,
+        over_number: d.over_number,
+        ball_number: d.ball_number,
+        is_legal: d.is_legal,
+        striker_id: d.striker_id,
+        non_striker_id: d.non_striker_id,
+        bowler_id: d.bowler_id,
+        batter_runs: d.batter_runs,
+        extra_runs: d.extra_runs,
+        total_runs: d.total_runs,
+        extra_type: d.extra_type,
+        is_free_hit: d.is_free_hit,
+        is_wicket: d.is_wicket,
+        wicket_type: d.wicket_type,
+        dismissed_player_id: d.dismissed_player_id,
+        fielder_id: d.fielder_id,
+      }))
+
+      setDeliveries(mapped)
+      const computed = computeInningsState(mapped, extract(batMembers ?? []).length, inn.overs_limit)
+      setState(computed)
+
+      // Restore current players from last delivery if we don't have init state
+      if (mapped.length > 0 && !initState) {
+        const last = mapped[mapped.length - 1]
+        const nextStriker = computed.current_striker_id ?? last.striker_id
+        const nextNonStriker = computed.current_non_striker_id ?? last.non_striker_id
+        const nextBowler = computed.current_bowler_id ?? last.bowler_id
+        setStrikerId(nextStriker)
+        setNonStrikerId(nextNonStriker)
+        setBowlerId(nextBowler)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load innings')
+    } finally {
+      setLoading(false)
+    }
+  }, [inningsId, matchId, initState])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadAll()
+  }, [loadAll])
+
+  function playerById(id: string): Player | undefined {
+    return [...battingPlayers, ...bowlingPlayers].find((p) => p.id === id)
+  }
+
+  function currentState() {
+    return computeInningsState(deliveries, battingPlayers.length, innings?.overs_limit ?? 10)
+  }
+
+  async function recordBall(opts: {
+    batterRuns: number
+    extraRuns: number
+    extraType: ExtraType | null
+    isLegal: boolean
+    isWicket: boolean
+    wicketType?: string | null
+    dismissedPlayerId?: string | null
+    fielderId?: string | null
+  }) {
+    if (!innings || !matchId || !strikerId || !nonStrikerId || !bowlerId) return
+    if (saving) return
+
+    setSaving(true)
+    try {
+      const cs = currentState()
+      const isFreehit = cs.next_ball_is_free_hit
+
+      const overNum = cs.overs_completed
+      const ballNum = cs.balls_in_current_over
+
+      await saveDelivery({
+        inningsId: innings.id,
+        matchId,
+        inningsNumber: innings.innings_number,
+        overNumber: overNum,
+        ballNumber: ballNum,
+        isLegal: opts.isLegal,
+        strikerId,
+        nonStrikerId,
+        bowlerId,
+        batterRuns: opts.batterRuns,
+        extraRuns: opts.extraRuns,
+        extraType: opts.extraType,
+        isFreehit,
+        isWicket: opts.isWicket,
+        wicketType: (opts.wicketType as WicketType | null) ?? null,
+        dismissedPlayerId: opts.dismissedPlayerId ?? null,
+        fielderId: opts.fielderId ?? null,
+      })
+
+      // Reload all deliveries and recompute state
+      const rawDeliveries = await loadDeliveries(innings.id)
+      const mapped: Delivery[] = rawDeliveries.map((d) => ({
+        id: d.id,
+        over_number: d.over_number,
+        ball_number: d.ball_number,
+        is_legal: d.is_legal,
+        striker_id: d.striker_id,
+        non_striker_id: d.non_striker_id,
+        bowler_id: d.bowler_id,
+        batter_runs: d.batter_runs,
+        extra_runs: d.extra_runs,
+        total_runs: d.total_runs,
+        extra_type: d.extra_type,
+        is_free_hit: d.is_free_hit,
+        is_wicket: d.is_wicket,
+        wicket_type: d.wicket_type,
+        dismissed_player_id: d.dismissed_player_id,
+        fielder_id: d.fielder_id,
+      }))
+      setDeliveries(mapped)
+
+      const newState = computeInningsState(mapped, battingPlayers.length, innings.overs_limit)
+      setState(newState)
+
+      // Update striker/non-striker from engine
+      if (newState.current_striker_id) setStrikerId(newState.current_striker_id)
+      if (newState.current_non_striker_id) setNonStrikerId(newState.current_non_striker_id)
+
+      // Wicket: need next batter unless innings complete
+      if (opts.isWicket && !newState.is_complete) {
+        setShowNextBatter(true)
+        return
+      }
+
+      // Over complete: need next bowler
+      if (newState.balls_in_current_over === 0 && newState.overs_completed > 0 && !newState.is_complete) {
+        setOverEndState('needs_bowler')
+        return
+      }
+
+      // Innings complete
+      if (newState.is_complete) {
+        await handleInningsComplete(newState.total_runs)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save delivery')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleUndo() {
+    if (!innings || saving) return
+    setSaving(true)
+    try {
+      await deleteLastDelivery(innings.id)
+      await loadAll()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Undo failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleInningsComplete(totalRuns: number) {
+    if (!innings || !matchId) return
+    await completeInnings(innings.id, totalRuns)
+
+    if (innings.innings_number === 1) {
+      // Navigate to innings 2 setup
+      navigate(`/match/${matchId}/innings/2`)
+    } else {
+      // Match over
+      await completeMatch(matchId)
+      navigate(`/match/${matchId}`)
+    }
+  }
+
+  async function handleEndInningsManually() {
+    if (!innings || !state) return
+    setEnding(true)
+    try {
+      await handleInningsComplete(state.total_runs)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to end innings')
+      setEnding(false)
+    }
+  }
+
+  function handleWicketResult(result: WicketResult) {
+    setShowWicket(false)
+    void recordBall({
+      batterRuns: result.batterRuns,
+      extraRuns: 0,
+      extraType: null,
+      isLegal: true,
+      isWicket: true,
+      wicketType: result.wicketType,
+      dismissedPlayerId: result.dismissedPlayerId,
+      fielderId: result.fielderId,
+    })
+  }
+
+  function confirmNextBowler() {
+    if (!nextBowlerId) return
+    const cs = currentState()
+    if (!canBowlNextOver(nextBowlerId, cs.last_bowler_id)) {
+      setError(`${playerById(nextBowlerId)?.name} bowled the previous over. Choose a different bowler.`)
+      return
+    }
+    setBowlerId(nextBowlerId)
+    setNextBowlerId('')
+    setOverEndState('idle')
+    setError(null)
+  }
+
+  function confirmNextBatter() {
+    if (!nextBatterId) return
+
+    // Determine which end was vacated by checking the dismissal on the most
+    // recent delivery — a run-out can dismiss either the striker or the
+    // non-striker, and the new batter must take that specific end, not
+    // always the striker's end.
+    const lastDelivery = deliveries[deliveries.length - 1]
+    const dismissedWasNonStriker =
+      lastDelivery?.is_wicket && lastDelivery.dismissed_player_id === lastDelivery.non_striker_id
+
+    if (dismissedWasNonStriker) {
+      // Striker survives and keeps strike; new batter fills the non-striker's end
+      setNonStrikerId(nextBatterId)
+    } else {
+      // Striker was dismissed (the common case); new batter takes strike
+      setStrikerId(nextBatterId)
+    }
+
+    setNextBatterId('')
+    setShowNextBatter(false)
+
+    // After batter selection, check if over also ended
+    const newState = computeInningsState(deliveries, battingPlayers.length, innings?.overs_limit ?? 10)
+    if (newState.balls_in_current_over === 0 && newState.overs_completed > 0) {
+      setOverEndState('needs_bowler')
+    }
+  }
+
+  if (loading) return <div className="text-zinc-500 text-sm py-12 text-center">Loading innings…</div>
+
+  if (error && !state) {
+    return (
+      <div className="px-4 py-12 text-center">
+        <p className="text-red-400 text-sm mb-3">{error}</p>
+        <Link to={`/match/${matchId}`} className="text-emerald-400 text-sm">← Back to match</Link>
+      </div>
+    )
+  }
+
+  const cs = state ?? computeInningsState(deliveries, battingPlayers.length, innings?.overs_limit ?? 10)
+  const striker = playerById(strikerId)
+  const nonStriker = playerById(nonStrikerId)
+
+  // Last 6 balls of current over for the mini-scorecard
+  const currentOverDeliveries = deliveries.filter((d) => d.over_number === cs.overs_completed)
+
+  return (
+    <div className="flex flex-col flex-1 bg-zinc-950">
+      {/* Scoreboard header */}
+      <div className="bg-zinc-900 px-4 pt-6 pb-4">
+        <div className="flex items-start justify-between mb-1">
+          <Link to={`/match/${matchId}`} className="text-zinc-500 text-xs">← Match</Link>
+          <button
+            onClick={() => setShowEndInnings(true)}
+            className="text-xs text-zinc-500 border border-zinc-700 rounded px-2 py-1"
+          >
+            End Innings
+          </button>
+        </div>
+
+        <div className="text-center mt-2">
+          <div className="text-4xl font-bold text-white">
+            {cs.total_runs}/{cs.wickets}
+          </div>
+          <div className="text-base text-zinc-400 mt-0.5">
+            {oversDisplay(cs.overs_completed, cs.balls_in_current_over)} ov
+            {innings?.target ? ` · Target: ${innings.target}` : ''}
+          </div>
+          {innings?.target && (
+            <div className="text-sm text-emerald-400 mt-0.5">
+              Need {innings.target - cs.total_runs} from {((innings.overs_limit - cs.overs_completed) * 6) - cs.balls_in_current_over} balls
+            </div>
+          )}
+        </div>
+
+        {/* Current over balls */}
+        <div className="flex justify-center gap-1.5 mt-3">
+          {currentOverDeliveries.map((d, i) => (
+            <div
+              key={i}
+              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                d.is_wicket
+                  ? 'bg-red-500 text-white'
+                  : d.extra_type === 'wide'
+                    ? 'bg-zinc-600 text-zinc-200'
+                    : d.extra_type === 'no_ball'
+                      ? 'bg-amber-500 text-zinc-950'
+                      : d.total_runs === 4 || d.total_runs === 6
+                        ? 'bg-emerald-500 text-zinc-950'
+                        : 'bg-zinc-700 text-zinc-200'
+              }`}
+            >
+              {d.is_wicket ? 'W' : d.extra_type === 'wide' ? 'Wd' : d.extra_type === 'no_ball' ? 'Nb' : d.total_runs}
+            </div>
+          ))}
+          {Array.from({ length: Math.max(0, 6 - currentOverDeliveries.filter((d) => d.is_legal).length) }).map((_, i) => (
+            <div key={`empty-${i}`} className="w-7 h-7 rounded-full border border-zinc-700" />
+          ))}
+        </div>
+      </div>
+
+      {/* Batters and bowler */}
+      <div className="px-4 py-3 border-b border-zinc-800">
+        <div className="flex gap-2 text-sm">
+          <div className="flex-1">
+            <div className="text-zinc-500 text-xs mb-1">Batting</div>
+            {striker && (
+              <div className="flex items-center justify-between">
+                <span className="text-white font-medium">{striker.name.split(' ')[0]} *</span>
+                <span className="text-zinc-400 text-xs">
+                  {cs.batters.find((b: BatterStats) => b.player_id === strikerId)?.runs ?? 0}
+                  ({cs.batters.find((b: BatterStats) => b.player_id === strikerId)?.balls ?? 0})
+                </span>
+              </div>
+            )}
+            {nonStriker && (
+              <div className="flex items-center justify-between mt-0.5">
+                <span className="text-zinc-400">{nonStriker.name.split(' ')[0]}</span>
+                <span className="text-zinc-500 text-xs">
+                  {cs.batters.find((b: BatterStats) => b.player_id === nonStrikerId)?.runs ?? 0}
+                  ({cs.batters.find((b: BatterStats) => b.player_id === nonStrikerId)?.balls ?? 0})
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="w-px bg-zinc-800" />
+          <div className="flex-1 pl-2">
+            <div className="text-zinc-500 text-xs mb-1">Bowling</div>
+            {playerById(bowlerId) && (
+              <div className="flex items-center justify-between">
+                <span className="text-white font-medium">{playerById(bowlerId)!.name.split(' ')[0]}</span>
+                <span className="text-zinc-400 text-xs">
+                  {(() => {
+                    const b = cs.bowlers.find((x: BowlerStats) => x.player_id === bowlerId)
+                    return b ? `${b.overs}.${b.balls} ov ${b.runs}r ${b.wickets}w` : ''
+                  })()}
+                </span>
+              </div>
+            )}
+            {cs.next_ball_is_free_hit && (
+              <div className="text-amber-400 text-xs mt-0.5 font-semibold">🔥 FREE HIT</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Error strip */}
+      {error && (
+        <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center justify-between">
+          <span className="text-red-400 text-xs">{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 text-xs ml-2">✕</button>
+        </div>
+      )}
+
+      {/* Over-end: pick next bowler */}
+      {overEndState === 'needs_bowler' && (
+        <div className="bg-zinc-900 border-b border-zinc-700 px-4 py-3">
+          <p className="text-sm font-semibold text-white mb-2">Select next bowler</p>
+          <select
+            value={nextBowlerId}
+            onChange={(e) => setNextBowlerId(e.target.value)}
+            className="input text-sm mb-2"
+          >
+            <option value="">Select bowler</option>
+            {bowlingPlayers.map((p) => (
+              <option key={p.id} value={p.id} disabled={p.id === cs.last_bowler_id}>
+                {p.name}{p.id === cs.last_bowler_id ? ' (bowled last over)' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={confirmNextBowler}
+            disabled={!nextBowlerId}
+            className="w-full bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm disabled:opacity-50"
+          >
+            Confirm Bowler
+          </button>
+        </div>
+      )}
+
+      {/* Wicket: pick next batter */}
+      {showNextBatter && (
+        <div className="bg-zinc-900 border-b border-zinc-700 px-4 py-3">
+          <p className="text-sm font-semibold text-white mb-2">Select next batter</p>
+          <select
+            value={nextBatterId}
+            onChange={(e) => setNextBatterId(e.target.value)}
+            className="input text-sm mb-2"
+          >
+            <option value="">Select batter</option>
+            {battingPlayers
+              .filter((p) => {
+                const b = cs.batters.find((x: BatterStats) => x.player_id === p.id)
+                return !b?.is_out && p.id !== strikerId && p.id !== nonStrikerId
+              })
+              .map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))
+            }
+          </select>
+          <button
+            onClick={confirmNextBatter}
+            disabled={!nextBatterId}
+            className="w-full bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm disabled:opacity-50"
+          >
+            Confirm Batter
+          </button>
+        </div>
+      )}
+
+      {/* Bye / Leg Bye: pick runs */}
+      {byePickerType && (
+        <div className="bg-zinc-900 border-b border-zinc-700 px-4 py-3">
+          <p className="text-sm font-semibold text-white mb-2">
+            {byePickerType === 'bye' ? 'Bye' : 'Leg Bye'} — how many runs?
+          </p>
+          <div className="grid grid-cols-5 gap-1.5 mb-2">
+            {[1, 2, 3, 4, 5].map((r) => (
+              <button
+                key={r}
+                onClick={() => {
+                  recordBall({ batterRuns: 0, extraRuns: r, extraType: byePickerType, isLegal: true, isWicket: false })
+                  setByePickerType(null)
+                }}
+                className="py-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white font-semibold text-base active:bg-zinc-700"
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setByePickerType(null)}
+            className="w-full bg-zinc-800 text-zinc-400 rounded-lg py-2 text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Scoring pad */}
+      <div className="flex-1 px-4 pt-4 pb-6 flex flex-col gap-3">
+        {/* Run buttons */}
+        <div>
+          <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wide">Runs</p>
+          <div className="grid grid-cols-6 gap-1.5">
+            {[0, 1, 2, 3, 4, 6].map((r) => (
+              <button
+                key={r}
+                onClick={() => recordBall({ batterRuns: r, extraRuns: 0, extraType: null, isLegal: true, isWicket: false })}
+                disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
+                className={`py-4 rounded-xl text-xl font-bold border transition-colors disabled:opacity-40 ${
+                  r === 4
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 active:bg-emerald-500/20'
+                    : r === 6
+                      ? 'bg-emerald-500 text-zinc-950 border-emerald-500 active:bg-emerald-600'
+                      : 'bg-zinc-800 text-white border-zinc-700 active:bg-zinc-700'
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Extras row */}
+        <div>
+          <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wide">Extras</p>
+          <div className="grid grid-cols-4 gap-1.5">
+            <ExtraButton
+              label="Wide"
+              sublabel="+1"
+              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
+              onClick={() => recordBall({ batterRuns: 0, extraRuns: 1, extraType: 'wide', isLegal: false, isWicket: false })}
+            />
+            <ExtraButton
+              label="No Ball"
+              sublabel="+1"
+              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
+              onClick={() => recordBall({ batterRuns: 0, extraRuns: 1, extraType: 'no_ball', isLegal: false, isWicket: false })}
+            />
+            <ExtraButton
+              label="Bye"
+              sublabel="runs?"
+              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
+              onClick={() => setByePickerType('bye')}
+            />
+            <ExtraButton
+              label="Leg Bye"
+              sublabel="runs?"
+              disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType}
+              onClick={() => setByePickerType('leg_bye')}
+            />
+          </div>
+        </div>
+
+        {/* Wicket + Undo */}
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            onClick={() => setShowWicket(true)}
+            disabled={saving || overEndState !== 'idle' || showNextBatter || !!byePickerType || !striker || !nonStriker}
+            className="py-3.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/30 font-bold text-base active:bg-red-500/20 disabled:opacity-40"
+          >
+            Wicket
+          </button>
+          <button
+            onClick={handleUndo}
+            disabled={saving || deliveries.length === 0}
+            className="py-3.5 rounded-xl bg-zinc-800 text-zinc-400 border border-zinc-700 font-medium text-sm active:bg-zinc-700 disabled:opacity-40"
+          >
+            ↩ Undo
+          </button>
+        </div>
+      </div>
+
+      {/* Wicket modal */}
+      {showWicket && striker && nonStriker && (
+        <WicketModal
+          striker={striker}
+          nonStriker={nonStriker}
+          fieldingPlayers={bowlingPlayers}
+          onConfirm={handleWicketResult}
+          onCancel={() => setShowWicket(false)}
+        />
+      )}
+
+      {/* End innings confirmation */}
+      {showEndInnings && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-6">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-white mb-2">End Innings?</h3>
+            <p className="text-sm text-zinc-400 mb-5">
+              Current score: {cs.total_runs}/{cs.wickets} in {oversDisplay(cs.overs_completed, cs.balls_in_current_over)} overs.
+              This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleEndInningsManually}
+                disabled={ending}
+                className="flex-1 bg-red-500 text-white font-semibold rounded-xl py-3 text-sm disabled:opacity-50"
+              >
+                {ending ? 'Ending…' : 'Yes, End Innings'}
+              </button>
+              <button
+                onClick={() => setShowEndInnings(false)}
+                className="flex-1 bg-zinc-800 text-zinc-300 rounded-xl py-3 text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ExtraButton({
+  label, sublabel, disabled, onClick,
+}: {
+  label: string
+  sublabel: string
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-center disabled:opacity-40 active:bg-zinc-700"
+    >
+      <div className="text-sm font-semibold text-zinc-200">{label}</div>
+      <div className="text-xs text-zinc-500">{sublabel}</div>
+    </button>
+  )
+}
