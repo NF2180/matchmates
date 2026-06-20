@@ -126,6 +126,20 @@ export async function loadInnings(inningsId: string): Promise<InningsRow | null>
 }
 
 /**
+ * Loads all innings for a match, ordered by innings number.
+ */
+export async function loadInningsForMatch(matchId: string): Promise<InningsRow[]> {
+  const { data, error } = await supabase
+    .from('innings')
+    .select('*')
+    .eq('match_id', matchId)
+    .order('innings_number', { ascending: true })
+
+  if (error) throw error
+  return (data as InningsRow[]) ?? []
+}
+
+/**
  * Marks match as completed.
  */
 export async function completeMatch(matchId: string): Promise<void> {

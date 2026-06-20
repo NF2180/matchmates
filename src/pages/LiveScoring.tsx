@@ -252,12 +252,12 @@ export default function LiveScoring() {
     await completeInnings(innings.id, totalRuns)
 
     if (innings.innings_number === 1) {
-      // Navigate to innings 2 setup
-      navigate(`/match/${matchId}/innings/2`)
+      // Show innings 1 scorecard before starting innings 2
+      navigate(`/match/${matchId}/scorecard?next=innings2`)
     } else {
-      // Match over
+      // Match over — show final scorecard
       await completeMatch(matchId)
-      navigate(`/match/${matchId}`)
+      navigate(`/match/${matchId}/scorecard`)
     }
   }
 
