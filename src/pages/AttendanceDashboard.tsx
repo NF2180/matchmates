@@ -14,6 +14,11 @@ export default function AttendanceDashboard() {
   const [guestName, setGuestName] = useState('')
   const [adding, setAdding] = useState(false)
 
+  const [showBulkAdd, setShowBulkAdd] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  const [bulkAdding, setBulkAdding] = useState(false)
+  const [bulkResult, setBulkResult] = useState<string | null>(null)
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
 
@@ -55,7 +60,6 @@ export default function AttendanceDashboard() {
 
     setAdding(true)
     try {
-      // guest players get a synthetic unique mobile number since the column is unique+required
       const syntheticMobile = `guest_${Date.now()}`
       const { data: guestPlayer, error: playerError } = await supabase
         .from('players')
@@ -82,6 +86,53 @@ export default function AttendanceDashboard() {
     } finally {
       setAdding(false)
     }
+  }
+
+  async function addBulkGuests(e: React.FormEvent) {
+    e.preventDefault()
+    if (!bulkText.trim() || !match) return
+
+    const names = bulkText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+
+    if (names.length === 0) return
+
+    setBulkAdding(true)
+    setBulkResult(null)
+    let added = 0
+    let skipped = 0
+
+    for (const name of names) {
+      try {
+        const syntheticMobile = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+        const { data: player, error: playerError } = await supabase
+          .from('players')
+          .insert({ name, mobile_number: syntheticMobile })
+          .select()
+          .single()
+        if (playerError) { skipped++; continue }
+
+        const { error: partError } = await supabase.from('participation').insert({
+          match_id: match.id,
+          player_id: player.id,
+          status: 'playing',
+          is_guest: true,
+          added_by_organizer: true,
+          responded_at: new Date().toISOString(),
+        })
+        if (partError) { skipped++; continue }
+        added++
+      } catch {
+        skipped++
+      }
+    }
+
+    setBulkResult(`Added ${added} player${added !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped` : ''}`)
+    setBulkText('')
+    if (id) loadData(id)
+    setBulkAdding(false)
   }
 
   async function removeParticipant(participationId: string) {
@@ -120,20 +171,31 @@ export default function AttendanceDashboard() {
         <p className="text-sm text-zinc-400">{match.match_name}</p>
       </header>
 
-      {!showAddGuest ? (
-        <button
-          onClick={() => setShowAddGuest(true)}
-          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm mb-6"
-        >
-          + Add Guest Player
-        </button>
-      ) : (
-        <form onSubmit={addGuest} className="flex gap-2 mb-6">
+      {/* Single guest add */}
+      {!showAddGuest && !showBulkAdd && (
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setShowAddGuest(true)}
+            className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm"
+          >
+            + Add Player
+          </button>
+          <button
+            onClick={() => setShowBulkAdd(true)}
+            className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm"
+          >
+            📋 Bulk Add
+          </button>
+        </div>
+      )}
+
+      {showAddGuest && (
+        <form onSubmit={addGuest} className="flex gap-2 mb-4">
           <input
             type="text"
             value={guestName}
             onChange={(e) => setGuestName(e.target.value)}
-            placeholder="Guest name"
+            placeholder="Player name"
             className="input"
             autoFocus
           />
@@ -146,14 +208,40 @@ export default function AttendanceDashboard() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setShowAddGuest(false)
-              setGuestName('')
-            }}
+            onClick={() => { setShowAddGuest(false); setGuestName('') }}
             className="px-3 bg-zinc-800 text-zinc-400 rounded-lg text-sm"
           >
             ✕
           </button>
+        </form>
+      )}
+
+      {showBulkAdd && (
+        <form onSubmit={addBulkGuests} className="flex flex-col gap-2 mb-4">
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            placeholder={'Paste names, one per line:\nRaj\nNitin\nVipul\nRahul'}
+            className="input min-h-[140px] resize-none"
+            autoFocus
+          />
+          {bulkResult && <p className="text-sm text-emerald-400">{bulkResult}</p>}
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={bulkAdding || !bulkText.trim()}
+              className="flex-1 bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm disabled:opacity-50"
+            >
+              {bulkAdding ? 'Adding…' : 'Add All as Playing'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowBulkAdd(false); setBulkText(''); setBulkResult(null) }}
+              className="px-4 bg-zinc-800 text-zinc-400 rounded-lg text-sm"
+            >
+              ✕
+            </button>
+          </div>
         </form>
       )}
 

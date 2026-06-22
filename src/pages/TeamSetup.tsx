@@ -148,6 +148,7 @@ export default function TeamSetup() {
 
       {showVoice && teamA && teamB ? (
         <VoiceTeamAssign
+          matchId={id ?? ''}
           teamA={teamA}
           teamB={teamB}
           participants={participants}
