@@ -111,7 +111,7 @@ export default function LiveScoring() {
       }))
 
       setDeliveries(mapped)
-      const computed = computeInningsState(mapped, extract(batMembers ?? []).length, inn.overs_limit)
+      const computed = computeInningsState(mapped, extract(batMembers ?? []).length, inn.overs_limit, inn.target)
       setState(computed)
 
       // Restore current players from last delivery if we don't have init state
@@ -141,7 +141,7 @@ export default function LiveScoring() {
   }
 
   function currentState() {
-    return computeInningsState(deliveries, battingPlayers.length, innings?.overs_limit ?? 10)
+    return computeInningsState(deliveries, battingPlayers.length, innings?.overs_limit ?? 10, innings?.target)
   }
 
   async function recordBall(opts: {
@@ -207,7 +207,7 @@ export default function LiveScoring() {
       }))
       setDeliveries(mapped)
 
-      const newState = computeInningsState(mapped, battingPlayers.length, innings.overs_limit)
+      const newState = computeInningsState(mapped, battingPlayers.length, innings.overs_limit, innings.target)
       setState(newState)
 
       // Update striker/non-striker from engine
@@ -362,7 +362,7 @@ export default function LiveScoring() {
     setShowNextBatter(false)
 
     // After batter selection, check if over also ended
-    const newState = computeInningsState(deliveries, battingPlayers.length, innings?.overs_limit ?? 10)
+    const newState = computeInningsState(deliveries, battingPlayers.length, innings?.overs_limit ?? 10, innings?.target)
     if (newState.balls_in_current_over === 0 && newState.overs_completed > 0) {
       setOverEndState('needs_bowler')
     }
@@ -379,7 +379,7 @@ export default function LiveScoring() {
     )
   }
 
-  const cs = state ?? computeInningsState(deliveries, battingPlayers.length, innings?.overs_limit ?? 10)
+  const cs = state ?? computeInningsState(deliveries, battingPlayers.length, innings?.overs_limit ?? 10, innings?.target)
   const striker = playerById(strikerId)
   const nonStriker = playerById(nonStrikerId)
 

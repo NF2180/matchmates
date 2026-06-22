@@ -91,7 +91,8 @@ export interface InningsState {
 export function computeInningsState(
   deliveries: Delivery[],
   teamSize: number,
-  oversLimit: number
+  oversLimit: number,
+  target?: number | null
 ): InningsState {
   const state: InningsState = {
     total_runs: 0,
@@ -281,7 +282,8 @@ export function computeInningsState(
   const maxWickets = teamSize - 1
   state.is_complete =
     state.wickets >= maxWickets ||
-    state.overs_completed >= oversLimit
+    state.overs_completed >= oversLimit ||
+    (target != null && target > 0 && state.total_runs >= target)
 
   return state
 }

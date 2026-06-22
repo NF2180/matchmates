@@ -101,7 +101,7 @@ export default function MatchScorecard() {
           fielder_id: d.fielder_id,
         }))
 
-        const state = computeInningsState(deliveries, battingPlayers.length, inn.overs_limit)
+        const state = computeInningsState(deliveries, battingPlayers.length, inn.overs_limit, inn.target)
 
         built.push({ innings: inn, battingTeam, bowlingTeam, battingPlayers, bowlingPlayers, state })
       }

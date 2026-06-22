@@ -16,6 +16,63 @@ export default function AdminPlayers() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  const [showAddSingle, setShowAddSingle] = useState(false)
+  const [addName, setAddName] = useState('')
+  const [addMobile, setAddMobile] = useState('')
+  const [addingPlayer, setAddingPlayer] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+
+  const [showBulkRegistry, setShowBulkRegistry] = useState(false)
+  const [bulkRegistryText, setBulkRegistryText] = useState('')
+  const [bulkRegistryAdding, setBulkRegistryAdding] = useState(false)
+  const [bulkRegistryResult, setBulkRegistryResult] = useState<string | null>(null)
+
+  async function addSingleToRegistry(e: React.FormEvent) {
+    e.preventDefault()
+    if (!addName.trim()) return
+    setAddingPlayer(true)
+    setAddError(null)
+    try {
+      const { error } = await supabase.from('players').insert({
+        name: addName.trim(),
+        mobile_number: addMobile.trim() || null,
+      })
+      if (error) throw error
+      setAddName('')
+      setAddMobile('')
+      setShowAddSingle(false)
+      await loadPlayers()
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Failed to add player')
+    } finally {
+      setAddingPlayer(false)
+    }
+  }
+
+  async function bulkAddToRegistry(e: React.FormEvent) {
+    e.preventDefault()
+    if (!bulkRegistryText.trim()) return
+    setBulkRegistryAdding(true)
+    setBulkRegistryResult(null)
+    const names = bulkRegistryText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+    let added = 0
+    let skipped = 0
+    for (const name of names) {
+      const { error } = await supabase
+        .from('players')
+        .insert({ name, mobile_number: null })
+      if (error) skipped++
+      else added++
+    }
+    setBulkRegistryResult(`Added ${added} to registry${skipped > 0 ? `, ${skipped} skipped` : ''}`)
+    setBulkRegistryText('')
+    await loadPlayers()
+    setBulkRegistryAdding(false)
+  }
+
   const loadPlayers = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -33,7 +90,6 @@ export default function AdminPlayers() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch on mount
     loadPlayers()
   }, [loadPlayers])
 
@@ -122,7 +178,51 @@ export default function AdminPlayers() {
         )}
       </header>
 
-      <div className="flex flex-col gap-2 mb-5">
+      <div className="flex flex-col gap-2 mb-4">
+        {!showAddSingle && !showBulkRegistry && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowAddSingle(true)}
+              className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm"
+            >
+              + Add Player
+            </button>
+            <button
+              onClick={() => setShowBulkRegistry(true)}
+              className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm"
+            >
+              📋 Bulk Add
+            </button>
+          </div>
+        )}
+
+        {showAddSingle && (
+          <form onSubmit={addSingleToRegistry} className="flex flex-col gap-2">
+            <input type="text" value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="Name" className="input" autoFocus />
+            <input type="tel" value={addMobile} onChange={(e) => setAddMobile(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Mobile (optional)" className="input" />
+            {addError && <p className="text-red-400 text-xs">{addError}</p>}
+            <div className="flex gap-2">
+              <button type="submit" disabled={addingPlayer || !addName.trim()} className="flex-1 bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm disabled:opacity-50">
+                {addingPlayer ? 'Adding…' : 'Add to Registry'}
+              </button>
+              <button type="button" onClick={() => { setShowAddSingle(false); setAddName(''); setAddMobile(''); setAddError(null) }} className="px-4 bg-zinc-800 text-zinc-400 rounded-lg text-sm">✕</button>
+            </div>
+          </form>
+        )}
+
+        {showBulkRegistry && (
+          <form onSubmit={bulkAddToRegistry} className="flex flex-col gap-2">
+            <textarea value={bulkRegistryText} onChange={(e) => setBulkRegistryText(e.target.value)} placeholder={'Names, one per line:\nRaj\nNitin\nVipul'} className="input min-h-[120px] resize-none" autoFocus />
+            {bulkRegistryResult && <p className="text-sm text-emerald-400">{bulkRegistryResult}</p>}
+            <div className="flex gap-2">
+              <button type="submit" disabled={bulkRegistryAdding || !bulkRegistryText.trim()} className="flex-1 bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm disabled:opacity-50">
+                {bulkRegistryAdding ? 'Adding…' : 'Add to Registry'}
+              </button>
+              <button type="button" onClick={() => { setShowBulkRegistry(false); setBulkRegistryText(''); setBulkRegistryResult(null) }} className="px-4 bg-zinc-800 text-zinc-400 rounded-lg text-sm">✕</button>
+            </div>
+          </form>
+        )}
+
         <MergePlayersTool players={players} onMerged={loadPlayers} />
       </div>
 

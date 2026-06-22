@@ -158,11 +158,18 @@ export default function MatchDetail() {
       {(match.status === 'live' || match.status === 'completed') && (
         <Link
           to={`/match/${match.id}/scorecard`}
-          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-center text-sm mb-6"
+          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-center text-sm mb-3"
         >
           📊 View Scorecard
         </Link>
       )}
+
+      <Link
+        to={`/match/${match.id}/duplicate`}
+        className="w-full bg-zinc-800 border border-zinc-700 text-zinc-400 font-medium rounded-xl py-3 text-center text-sm mb-6"
+      >
+        ⧉ Duplicate This Match
+      </Link>
 
       <div className="grid grid-cols-3 gap-2 mb-6">
         <StatBox label="Playing" count={playing.length} color="emerald" />
