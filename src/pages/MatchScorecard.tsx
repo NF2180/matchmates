@@ -196,8 +196,11 @@ export default function MatchScorecard() {
 function InningsCard({ bundle }: { bundle: InningsBundle }) {
   const { innings, battingTeam, bowlingTeam, battingPlayers, bowlingPlayers, state } = bundle
 
+  const playerById = (playerId: string, pool: Player[]) =>
+    pool.find((p) => p.id === playerId)
+
   const playerName = (playerId: string, pool: Player[]) =>
-    pool.find((p) => p.id === playerId)?.name ?? 'Unknown'
+    playerById(playerId, pool)?.name ?? 'Unknown'
 
   const oversDisplay = `${state.overs_completed}.${state.balls_in_current_over}`
   const runRate = state.balls_bowled_total > 0
@@ -234,10 +237,16 @@ function InningsCard({ bundle }: { bundle: InningsBundle }) {
           </div>
           {state.batters.map((b) => {
             const sr = b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : '0.0'
+            const p = playerById(b.player_id, battingPlayers)
             return (
               <div key={b.player_id} className="px-3 py-2.5 border-b border-zinc-800/60 last:border-0">
                 <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-2 items-center">
-                  <span className="text-sm text-white truncate">{playerName(b.player_id, battingPlayers)}</span>
+                  <Link
+                    to={`/player/${b.player_id}`}
+                    className="text-sm text-white truncate underline-offset-2 active:text-emerald-400"
+                  >
+                    {p?.name ?? 'Unknown'}
+                  </Link>
                   <span className="text-sm text-white text-right w-8 font-medium">{b.runs}</span>
                   <span className="text-sm text-zinc-400 text-right w-8">{b.balls}</span>
                   <span className="text-sm text-zinc-400 text-right w-6">{b.fours}</span>
@@ -307,7 +316,12 @@ function InningsCard({ bundle }: { bundle: InningsBundle }) {
                 key={bw.player_id}
                 className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center px-3 py-2.5 border-b border-zinc-800/60 last:border-0"
               >
-                <span className="text-sm text-white truncate">{playerName(bw.player_id, bowlingPlayers)}</span>
+                <Link
+                  to={`/player/${bw.player_id}`}
+                  className="text-sm text-white truncate active:text-emerald-400"
+                >
+                  {playerName(bw.player_id, bowlingPlayers)}
+                </Link>
                 <span className="text-sm text-zinc-400 text-right w-10">{bw.overs}.{bw.balls}</span>
                 <span className="text-sm text-zinc-400 text-right w-8">{bw.runs}</span>
                 <span className="text-sm text-white text-right w-6 font-medium">{bw.wickets}</span>

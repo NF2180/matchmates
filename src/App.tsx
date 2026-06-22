@@ -9,6 +9,7 @@ import TeamSetup from './pages/TeamSetup'
 import InningsSetup from './pages/InningsSetup'
 import LiveScoring from './pages/LiveScoring'
 import MatchScorecard from './pages/MatchScorecard'
+import PlayerProfile from './pages/PlayerProfile'
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
       <Route path="/match/:id/innings/:inningsNum" element={<InningsSetup />} />
       <Route path="/match/:id/scoring/:inningsId" element={<LiveScoring />} />
       <Route path="/match/:id/scorecard" element={<MatchScorecard />} />
+      <Route path="/player/:playerId" element={<PlayerProfile />} />
       <Route path="/join/:token" element={<JoinMatch />} />
       <Route path="/admin/players" element={<AdminPlayers />} />
     </Routes>

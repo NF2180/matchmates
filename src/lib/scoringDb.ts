@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { recomputeCareerStatsForMatch } from './careerStats'
 import type { DeliveryInput } from './scoringEngine'
 import { buildDelivery } from './scoringEngine'
 
@@ -140,8 +141,67 @@ export async function loadInningsForMatch(matchId: string): Promise<InningsRow[]
 }
 
 /**
- * Marks match as completed.
+ * Marks match as completed, stores a result summary string, and triggers
+ * career stats recomputation for all participants.
  */
 export async function completeMatch(matchId: string): Promise<void> {
-  await supabase.from('matches').update({ status: 'completed' }).eq('id', matchId)
+  // Compute result summary from innings data
+  const resultSummary = await computeResultSummary(matchId)
+
+  await supabase
+    .from('matches')
+    .update({ status: 'completed', result_summary: resultSummary })
+    .eq('id', matchId)
+
+  // Fire-and-forget career stats recomputation
+  void recomputeCareerStatsForMatch(matchId)
+}
+
+async function computeResultSummary(matchId: string): Promise<string> {
+  try {
+    const { data: innings } = await supabase
+      .from('innings')
+      .select('id, innings_number, batting_team_id, overs_limit, batting_team:teams!batting_team_id(name)')
+      .eq('match_id', matchId)
+      .eq('status', 'completed')
+      .order('innings_number', { ascending: true })
+
+    if (!innings || innings.length < 2) return ''
+
+    const inn1 = innings[0]
+    const inn2 = innings[1]
+
+    // Tally runs and wickets from deliveries for each innings
+    async function tally(inningsId: string) {
+      const { data: deliveries } = await supabase
+        .from('deliveries')
+        .select('batter_runs, extra_runs, is_wicket, wicket_type')
+        .eq('innings_id', inningsId)
+
+      let runs = 0
+      let wickets = 0
+      for (const d of deliveries ?? []) {
+        runs += (d.batter_runs ?? 0) + (d.extra_runs ?? 0)
+        if (d.is_wicket && d.wicket_type !== 'retired_hurt') wickets++
+      }
+      return { runs, wickets }
+    }
+
+    const [t1, t2] = await Promise.all([tally(inn1.id), tally(inn2.id)])
+
+    const team1Name = (inn1.batting_team as { name: string }[])?.[0]?.name ?? 'Team 1'
+    const team2Name = (inn2.batting_team as { name: string }[])?.[0]?.name ?? 'Team 2'
+
+    if (t2.runs > t1.runs) {
+      const wicketsLeft = Math.max(0, (inn2.overs_limit > 0 ? 11 : 11) - 1 - t2.wickets)
+      return `${team2Name} won by ${wicketsLeft} wicket${wicketsLeft !== 1 ? 's' : ''}`
+    } else if (t1.runs > t2.runs) {
+      const margin = t1.runs - t2.runs
+      return `${team1Name} won by ${margin} run${margin !== 1 ? 's' : ''}`
+    } else {
+      return 'Match tied'
+    }
+  } catch {
+    return ''
+  }
 }

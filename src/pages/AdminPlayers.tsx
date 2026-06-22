@@ -192,7 +192,9 @@ export default function AdminPlayers() {
                   {p.name[0]?.toUpperCase() ?? '?'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-white truncate">{p.name}</div>
+                  <Link to={`/player/${p.id}`} className="text-sm text-white truncate active:text-emerald-400">
+                    {p.name}
+                  </Link>
                   <div className="text-xs text-zinc-500 mt-0.5">
                     {isGuestMobile(p.mobile_number) ? (
                       <span className="text-zinc-600">Guest player</span>

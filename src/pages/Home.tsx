@@ -83,6 +83,9 @@ export default function Home() {
             {match.ground?.name && (
               <div className="text-xs text-zinc-500 mt-1">📍 {match.ground.name}</div>
             )}
+            {match.result_summary && (
+              <div className="text-xs text-emerald-400 mt-1 font-medium">{match.result_summary}</div>
+            )}
             <div className="text-xs text-zinc-600 mt-2 font-mono">{match.match_code}</div>
           </Link>
         ))}

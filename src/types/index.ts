@@ -31,6 +31,7 @@ export interface Match {
   status: MatchStatus
   batting_first_team_id: string | null
   current_innings_id: string | null
+  result_summary: string | null
   created_at: string
   // joined data
   ground?: Ground | null
