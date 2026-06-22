@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { fuzzyMatchName } from '../lib/fuzzyMatch'
 import { supabase } from '../lib/supabase'
 import type { Team, Participation } from '../types'
 
@@ -82,7 +81,6 @@ function detectTeamSide(word: string): 'A' | 'B' | null {
 export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, onAssignments, onClose }: Props) {
   const [micState, setMicState] = useState<MicState>('idle')
   const [transcript, setTranscript] = useState('')
-  const [preview, setPreview] = useState<VoiceAssignment[]>([])
   const [unmatched, setUnmatched] = useState<VoiceUnmatched[]>([])
   const [step, setStep] = useState<'record' | 'review'>('record')
   const [applying, setApplying] = useState(false)
@@ -132,47 +130,41 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
     const raw = transcript.trim()
     if (!raw) return
 
-    const candidates = participants.map((p) => ({
-      id: p.id,
-      name: p.player?.name ?? '',
-    }))
-
-    // Normalise
+    // Normalise — but preserve capitalisation for display
     const normalised = raw
-      .toLowerCase()
       .replace(/[,:;.!?]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
 
     const words = normalised.split(/\s+/).filter(Boolean)
 
-    // Walk the word list, looking for "team <label>" markers and player names
-    // between them. Much more resilient than regex: we scan word by word and
-    // detect team labels using detectTeamSide() which handles mishearings.
+    // Walk word by word, detect "team <label>" markers
     const sections: Array<{ side: 'A' | 'B'; nameWords: string[] }> = []
     let currentSection: { side: 'A' | 'B'; nameWords: string[] } | null = null
 
     let i = 0
     while (i < words.length) {
-      if (words[i] === 'team' && i + 1 < words.length) {
-        const side = detectTeamSide(words[i + 1])
+      if (words[i].toLowerCase() === 'team' && i + 1 < words.length) {
+        const side = detectTeamSide(words[i + 1].toLowerCase())
         if (side !== null) {
           currentSection = { side, nameWords: [] }
           sections.push(currentSection)
-          i += 2 // skip "team" and the label word
+          i += 2
           continue
         }
       }
-      // If we have an active section, accumulate name words into it
       if (currentSection) {
         currentSection.nameWords.push(words[i])
       }
       i++
     }
 
-    const assignments: VoiceAssignment[] = []
-    const unmatchedNames: VoiceUnmatched[] = []
-    const usedParticipationIds = new Set<string>()
+    // Build participant name lookup for grouping hints only —
+    // used to decide if two adjacent words form one name (e.g. "Raj Sharma"),
+    // but NOT used to gate who gets assigned. Everyone gets assigned.
+    const knownNames = participants.map((p) => p.player?.name?.toLowerCase() ?? '')
+
+    const allEntries: VoiceUnmatched[] = []
 
     for (const section of sections) {
       const teamId = section.side === 'A' ? teamA.id : teamB.id
@@ -181,96 +173,90 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
 
       let j = 0
       while (j < nameWords.length) {
-        let matched = false
-
-        // Try longest match first (up to 3 words for multi-word names)
-        for (let len = Math.min(3, nameWords.length - j); len >= 1; len--) {
-          const nameTry = nameWords.slice(j, j + len).join(' ')
-          const result = fuzzyMatchName(nameTry, candidates)
-
-          if (result && !usedParticipationIds.has(result.candidate.id)) {
-            const participation = participants.find((p) => p.id === result.candidate.id)
-            if (participation) {
-              assignments.push({ participation, teamId, teamName })
-              usedParticipationIds.add(result.candidate.id)
-              j += len
-              matched = true
-              break
-            }
-          }
-        }
-
-        if (!matched) {
-          // Flag as unmatched if it looks like a real name attempt (4+ chars)
-          if (nameWords[j].length >= 4) {
-            // Capitalize first letter for display
-            const displayName = nameWords[j].charAt(0).toUpperCase() + nameWords[j].slice(1)
-            unmatchedNames.push({ spokenName: displayName, teamId, teamName })
-          }
+        let nameEntry: string
+        // Try 2-word grouping if combined matches a known participant name
+        if (
+          j + 1 < nameWords.length &&
+          knownNames.some((n) =>
+            n === `${nameWords[j]} ${nameWords[j + 1]}`.toLowerCase()
+          )
+        ) {
+          nameEntry = `${nameWords[j]} ${nameWords[j + 1]}`
+          j += 2
+        } else {
+          nameEntry = nameWords[j].charAt(0).toUpperCase() + nameWords[j].slice(1)
           j++
         }
+        allEntries.push({ spokenName: nameEntry, teamId, teamName })
       }
     }
 
-    setPreview(assignments)
-    setUnmatched(unmatchedNames)
-
-    if (sections.length === 0) {
-      // Couldn't detect any "team X" marker at all — go to review so user sees the transcript
-      setStep('review')
-    } else if (assignments.length > 0 || unmatchedNames.length > 0) {
-      setStep('review')
-    }
+    setUnmatched(allEntries)
+    setStep('review')
   }
 
   async function handleConfirm() {
     setApplying(true)
     try {
-      const newAssignments: VoiceAssignment[] = []
+      const allAssignments: VoiceAssignment[] = []
+
       for (const u of unmatched) {
-        if (!u.teamId) continue
+        if (!u.spokenName.trim() || !u.teamId) continue
 
-        // Create a new player with no mobile number
-        const { data: newPlayer, error: playerError } = await supabase
-          .from('players')
-          .insert({ name: u.spokenName, mobile_number: null })
-          .select()
-          .single()
-        if (playerError) continue
+        // Check if this name matches an existing confirmed participant (exact, case-insensitive)
+        const existingParticipation = participants.find(
+          (p) => p.player?.name?.toLowerCase() === u.spokenName.trim().toLowerCase()
+        )
 
-        // Insert participation and get the real participation row ID back
-        const { data: newParticipation, error: partError } = await supabase
-          .from('participation')
-          .insert({
-            match_id: matchId,
-            player_id: newPlayer.id,
-            status: 'playing',
-            is_guest: false,
-            added_by_organizer: true,
-            responded_at: new Date().toISOString(),
+        if (existingParticipation) {
+          // Reuse existing participation record
+          allAssignments.push({
+            participation: existingParticipation,
+            teamId: u.teamId,
+            teamName: u.teamName,
           })
-          .select()
-          .single()
-        if (partError) continue
+        } else {
+          // Create new player + participation
+          const { data: newPlayer, error: playerError } = await supabase
+            .from('players')
+            .insert({ name: u.spokenName.trim(), mobile_number: null })
+            .select()
+            .single()
+          if (playerError) continue
 
-        newAssignments.push({
-          participation: {
-            id: newParticipation.id, // ← real participation row ID, safe to pass to assignToTeam
-            match_id: matchId,
-            player_id: newPlayer.id,
-            status: 'playing',
-            is_guest: false,
-            added_by_organizer: true,
-            responded_at: new Date().toISOString(),
-            created_at: new Date().toISOString(),
-            player: newPlayer,
-          },
-          teamId: u.teamId,
-          teamName: u.teamName,
-        })
+          const { data: newParticipation, error: partError } = await supabase
+            .from('participation')
+            .insert({
+              match_id: matchId,
+              player_id: newPlayer.id,
+              status: 'playing',
+              is_guest: false,
+              added_by_organizer: true,
+              responded_at: new Date().toISOString(),
+            })
+            .select()
+            .single()
+          if (partError) continue
+
+          allAssignments.push({
+            participation: {
+              id: newParticipation.id,
+              match_id: matchId,
+              player_id: newPlayer.id,
+              status: 'playing',
+              is_guest: false,
+              added_by_organizer: true,
+              responded_at: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              player: newPlayer,
+            },
+            teamId: u.teamId,
+            teamName: u.teamName,
+          })
+        }
       }
 
-      onAssignments([...preview, ...newAssignments])
+      onAssignments(allAssignments)
       onClose()
     } finally {
       setApplying(false)
@@ -351,56 +337,55 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
         <>
           <p className="text-xs text-zinc-400 mb-1">Transcript: <span className="text-zinc-500">{transcript}</span></p>
 
-          {preview.length === 0 && unmatched.length === 0 && (
+          {unmatched.length === 0 && (
             <div className="py-3 text-sm text-amber-400 text-center">
-              No team labels recognised. Make sure you say "Team A" or "Team B" clearly before the names.
-            </div>
-          )}
-
-          {preview.length > 0 && (
-            <div className="flex flex-col gap-1.5 my-3">
-              <p className="text-xs text-zinc-400">Matched ({preview.length}):</p>
-              {preview.map((a) => (
-                <div key={a.participation.id} className="flex items-center justify-between bg-zinc-800 rounded-lg px-3 py-2">
-                  <span className="text-sm text-white">{a.participation.player?.name}</span>
-                  <span className="text-xs font-medium text-emerald-400">→ {a.teamName}</span>
-                </div>
-              ))}
+              No team labels recognised. Say "Team A" or "Team B" clearly before the names.
             </div>
           )}
 
           {unmatched.length > 0 && (
-            <div className="flex flex-col gap-2 mb-3">
-              <p className="text-xs text-amber-400">Not in participant list — will be created as new players:</p>
+            <div className="flex flex-col gap-1.5 my-3">
+              <p className="text-xs text-zinc-400 mb-1">
+                Edit names/teams if needed, then confirm:
+              </p>
               {unmatched.map((u, i) => (
-                <div key={i} className="flex items-center gap-2 bg-zinc-800/60 rounded-lg px-3 py-2">
-                  <span className="text-sm text-amber-300 flex-1">{u.spokenName}</span>
+                <div key={i} className="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2">
+                  <input
+                    type="text"
+                    value={u.spokenName}
+                    onChange={(e) =>
+                      setUnmatched((prev) =>
+                        prev.map((r, ri) => ri === i ? { ...r, spokenName: e.target.value } : r)
+                      )
+                    }
+                    className="flex-1 bg-transparent text-sm text-white outline-none border-b border-zinc-600 focus:border-emerald-500 py-0.5"
+                  />
                   <select
                     value={u.teamId}
                     onChange={(e) => updateUnmatchedTeam(i, e.target.value)}
-                    className="text-xs bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-white"
+                    className="text-xs bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-white shrink-0"
                   >
                     <option value={teamA.id}>{teamA.name}</option>
                     <option value={teamB.id}>{teamB.name}</option>
                   </select>
-                  <button onClick={() => removeUnmatched(i)} className="text-zinc-500 text-xs px-1">✕</button>
+                  <button onClick={() => removeUnmatched(i)} className="text-zinc-500 text-xs px-1 shrink-0">✕</button>
                 </div>
               ))}
             </div>
           )}
 
           <div className="flex gap-2 mt-2">
-            {(preview.length > 0 || unmatched.length > 0) && (
+            {unmatched.length > 0 && (
               <button
                 onClick={handleConfirm}
                 disabled={applying}
                 className="flex-1 bg-emerald-500 active:bg-emerald-600 disabled:opacity-50 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm"
               >
-                {applying ? 'Applying…' : `Apply ${preview.length + unmatched.length} Assignment${preview.length + unmatched.length !== 1 ? 's' : ''}`}
+                {applying ? 'Applying…' : `Assign ${unmatched.length} Player${unmatched.length !== 1 ? 's' : ''}`}
               </button>
             )}
             <button
-              onClick={() => { setStep('record'); setTranscript(''); setPreview([]); setUnmatched([]) }}
+              onClick={() => { setStep('record'); setTranscript(''); setUnmatched([]) }}
               className="flex-1 bg-zinc-800 text-zinc-300 rounded-lg py-2.5 text-sm"
             >
               Try Again
