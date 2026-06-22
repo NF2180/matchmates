@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Player } from '../types'
-import BulkPasteImport from '../components/BulkPasteImport'
 import MergePlayersTool from '../components/MergePlayersTool'
 
 export default function AdminPlayers() {
@@ -16,7 +15,6 @@ export default function AdminPlayers() {
   const [editMobile, setEditMobile] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [showBulkPaste, setShowBulkPaste] = useState(false)
 
   const loadPlayers = useCallback(async () => {
     setLoading(true)
@@ -125,25 +123,6 @@ export default function AdminPlayers() {
       </header>
 
       <div className="flex flex-col gap-2 mb-5">
-        {!showBulkPaste ? (
-          <button
-            onClick={() => setShowBulkPaste(true)}
-            className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm"
-          >
-            📋 Paste Participant List
-          </button>
-        ) : (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-white">Paste Participant List</h3>
-              <button onClick={() => setShowBulkPaste(false)} className="text-zinc-500 text-xs">
-                ✕
-              </button>
-            </div>
-            <BulkPasteImport onComplete={loadPlayers} />
-          </div>
-        )}
-
         <MergePlayersTool players={players} onMerged={loadPlayers} />
       </div>
 

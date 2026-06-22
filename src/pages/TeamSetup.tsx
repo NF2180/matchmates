@@ -151,7 +151,7 @@ export default function TeamSetup() {
           matchId={id ?? ''}
           teamA={teamA}
           teamB={teamB}
-          participants={participants}
+          participants={participants.filter((p) => p.status === 'playing')}
           onAssignments={(assignments) => handleVoiceAssignments(assignments)}
           onClose={() => setShowVoice(false)}
         />
