@@ -7,15 +7,10 @@ export interface MergeResult {
 
 /**
  * Merges `duplicateId` into `canonicalId`:
- *   - Any participation rows belonging to the duplicate are re-pointed to
- *     the canonical player, UNLESS the canonical player already has a
- *     participation row for that same match (unique constraint), in which
- *     case that duplicate row is simply deleted instead (we keep whichever
- *     status the canonical player already has for that match).
- *   - The duplicate player record itself is deleted once empty.
- *
- * The canonical player's name/mobile are left untouched; admin can edit
- * those separately if needed.
+ *   - team_members rows for the duplicate are cleaned up first
+ *   - participation rows are moved to the canonical player, or deleted
+ *     if the canonical already has one for the same match
+ *   - the duplicate player record is then deleted
  */
 export async function mergePlayers(canonicalId: string, duplicateId: string): Promise<MergeResult> {
   if (canonicalId === duplicateId) {
@@ -33,21 +28,31 @@ export async function mergePlayers(canonicalId: string, duplicateId: string): Pr
   let skipped = 0
 
   for (const row of dupParticipations ?? []) {
-    const { data: existing } = await supabase
+    const { data: existingRows } = await supabase
       .from('participation')
       .select('id')
       .eq('match_id', row.match_id)
       .eq('player_id', canonicalId)
-      .maybeSingle()
+      .limit(1)
 
-    if (existing) {
-      // canonical player already has a row for this match - drop the duplicate's row
+    if (existingRows?.[0]) {
+      // Canonical already has this match — clean up team_members then delete duplicate participation
+      await supabase.from('team_members').delete().eq('participation_id', row.id)
       await supabase.from('participation').delete().eq('id', row.id)
       skipped++
     } else {
+      // Move to canonical player
       await supabase.from('participation').update({ player_id: canonicalId }).eq('id', row.id)
       moved++
     }
+  }
+
+  // Safety: clean up any remaining participation/team_members for the duplicate
+  const { data: remaining } = await supabase
+    .from('participation').select('id').eq('player_id', duplicateId)
+  for (const row of remaining ?? []) {
+    await supabase.from('team_members').delete().eq('participation_id', row.id)
+    await supabase.from('participation').delete().eq('id', row.id)
   }
 
   const { error: deleteError } = await supabase.from('players').delete().eq('id', duplicateId)

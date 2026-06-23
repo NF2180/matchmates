@@ -234,25 +234,27 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
         }
 
         // Check global registry by name before creating a new record
-        const { data: registryMatch } = await supabase
+        const { data: registryMatches } = await supabase
           .from('players')
           .select('*')
           .ilike('name', u.spokenName.trim())
-          .maybeSingle()
+          .limit(1)
 
+        const registryMatch = registryMatches?.[0] ?? null
         let playerId: string
         let playerRecord = registryMatch
 
         if (registryMatch) {
           playerId = registryMatch.id
           // Check if already in this match
-          const { data: existingPart } = await supabase
+          const { data: existingParts } = await supabase
             .from('participation')
             .select('*')
             .eq('match_id', matchId)
             .eq('player_id', playerId)
-            .maybeSingle()
+            .limit(1)
 
+          const existingPart = existingParts?.[0] ?? null
           if (existingPart) {
             allAssignments.push({
               participation: { ...existingPart, player: registryMatch },

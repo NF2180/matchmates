@@ -73,12 +73,11 @@ export default function AttendanceDashboard() {
       // Check registry first for duplicates
       const { data: allPlayers } = await supabase.from('players').select('*')
       const candidates = ((allPlayers as Player[]) ?? []).map((p) => ({ id: p.id, name: p.name }))
-      const registryMatch = fuzzyMatchName(guestName.trim(), candidates)
+      const registryResult = fuzzyMatchName(guestName.trim(), candidates)
 
       let playerId: string
-      if (registryMatch) {
-        // Use existing registry player
-        playerId = registryMatch.candidate.id
+      if (registryResult) {
+        playerId = registryResult.candidate.id
       } else {
         const syntheticMobile = `guest_${Date.now()}`
         const { data: newPlayer, error: playerError } = await supabase
@@ -91,19 +90,19 @@ export default function AttendanceDashboard() {
       }
 
       // Check if already in this match
-      const { data: existing } = await supabase
+      const { data: existingParts } = await supabase
         .from('participation')
         .select('id')
         .eq('match_id', match.id)
         .eq('player_id', playerId)
-        .maybeSingle()
+        .limit(1)
 
-      if (!existing) {
+      if (!existingParts?.[0]) {
         await supabase.from('participation').insert({
           match_id: match.id,
           player_id: playerId,
           status: 'playing',
-          is_guest: !registryMatch,
+          is_guest: !registryResult,
           added_by_organizer: true,
           responded_at: new Date().toISOString(),
         })
