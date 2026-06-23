@@ -125,8 +125,24 @@ export default function AdminPlayers() {
     setSaveError(null)
   }
 
+  async function deletePlayer(playerId: string, playerName: string) {
+    if (!confirm(`Permanently delete "${playerName}" from the registry? This removes them from all matches and cannot be undone.`)) return
+    try {
+      // Cascade: delete team_members → participation → player
+      const { data: parts } = await supabase.from('participation').select('id').eq('player_id', playerId)
+      for (const p of parts ?? []) {
+        await supabase.from('team_members').delete().eq('participation_id', p.id)
+      }
+      await supabase.from('participation').delete().eq('player_id', playerId)
+      const { error } = await supabase.from('players').delete().eq('id', playerId)
+      if (error) throw error
+      await loadPlayers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed — run migration 005 in Supabase SQL Editor first')
+    }
+  }
+
   async function saveEdit(playerId: string) {
-    setSaveError(null)
 
     const trimmedMobile = editMobile.trim()
     if (trimmedMobile && !/^[0-9]{10}$/.test(trimmedMobile)) {
@@ -364,6 +380,12 @@ export default function AdminPlayers() {
                   className="text-emerald-400 text-xs px-2 py-1 shrink-0"
                 >
                   Edit
+                </button>
+                <button
+                  onClick={() => deletePlayer(p.id, p.name)}
+                  className="text-red-400 text-xs px-2 py-1 shrink-0"
+                >
+                  Delete
                 </button>
               </div>
             )}
