@@ -145,7 +145,7 @@ export default function MatchScorecard() {
   const active = bundles[activeTab]
 
   // Compute detailed result string when both innings are complete
-  const resultBanner = computeResultBanner(bundles, match)
+  const resultBanner = computeResultBanner(bundles)
 
   return (
     <div className="flex flex-col flex-1 px-4 pb-10">
@@ -344,12 +344,14 @@ function InningsCard({ bundle }: { bundle: InningsBundle }) {
   )
 }
 
-function computeResultBanner(bundles: InningsBundle[], match: Match): string | null {
+function computeResultBanner(bundles: InningsBundle[]): string | null {
   if (bundles.length < 2) return null
-  if (match.status !== 'completed') return null
 
   const inn1 = bundles[0]
   const inn2 = bundles[1]
+
+  // Show result only when both innings are completed
+  if (inn1.innings.status !== 'completed' || inn2.innings.status !== 'completed') return null
 
   const runs1 = inn1.state.total_runs
   const runs2 = inn2.state.total_runs
@@ -358,18 +360,17 @@ function computeResultBanner(bundles: InningsBundle[], match: Match): string | n
 
   const totalBalls2 = inn2.innings.overs_limit * 6
   const ballsUsed2 = inn2.state.balls_bowled_total
-  const ballsToSpare = totalBalls2 - ballsUsed2
+  const ballsToSpare = Math.max(0, totalBalls2 - ballsUsed2)
 
   if (runs2 > runs1) {
-    // Chasing side won
     const wicketsInHand = Math.max(0, (teamSize2 - 1) - wickets2)
     const spare = ballsToSpare > 0 ? ` and ${ballsToSpare} ball${ballsToSpare !== 1 ? 's' : ''} to spare` : ''
-    return `${inn2.battingTeam.name} won by ${wicketsInHand} wicket${wicketsInHand !== 1 ? 's' : ''}${spare}`
+    return `🏆 ${inn2.battingTeam.name} won by ${wicketsInHand} wicket${wicketsInHand !== 1 ? 's' : ''}${spare}`
   } else if (runs1 > runs2) {
     const margin = runs1 - runs2
-    return `${inn1.battingTeam.name} won by ${margin} run${margin !== 1 ? 's' : ''}`
+    return `🏆 ${inn1.battingTeam.name} won by ${margin} run${margin !== 1 ? 's' : ''}`
   } else {
-    return 'Match tied'
+    return '🤝 Match tied'
   }
 }
 

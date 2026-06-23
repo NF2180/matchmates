@@ -199,61 +199,109 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
     setApplying(true)
     try {
       const allAssignments: VoiceAssignment[] = []
+      const createdThisSession: Array<{ name: string; participation: Participation }> = []
 
       for (const u of unmatched) {
         if (!u.spokenName.trim() || !u.teamId) continue
 
-        // Check if this name matches an existing confirmed participant (exact, case-insensitive)
+        const spokenNorm = u.spokenName.trim().toLowerCase()
+
+        // Check against existing confirmed participants (case-insensitive)
         const existingParticipation = participants.find(
-          (p) => p.player?.name?.toLowerCase() === u.spokenName.trim().toLowerCase()
+          (p) => (p.player?.name ?? '').toLowerCase() === spokenNorm
         )
 
         if (existingParticipation) {
-          // Reuse existing participation record
           allAssignments.push({
             participation: existingParticipation,
             teamId: u.teamId,
             teamName: u.teamName,
           })
+          continue
+        }
+
+        // Check against players created earlier in this same voice session
+        const sessionMatch = createdThisSession.find(
+          (c) => c.name.toLowerCase() === spokenNorm
+        )
+        if (sessionMatch) {
+          allAssignments.push({
+            participation: sessionMatch.participation,
+            teamId: u.teamId,
+            teamName: u.teamName,
+          })
+          continue
+        }
+
+        // Check global registry by name before creating a new record
+        const { data: registryMatch } = await supabase
+          .from('players')
+          .select('*')
+          .ilike('name', u.spokenName.trim())
+          .maybeSingle()
+
+        let playerId: string
+        let playerRecord = registryMatch
+
+        if (registryMatch) {
+          playerId = registryMatch.id
+          // Check if already in this match
+          const { data: existingPart } = await supabase
+            .from('participation')
+            .select('*')
+            .eq('match_id', matchId)
+            .eq('player_id', playerId)
+            .maybeSingle()
+
+          if (existingPart) {
+            allAssignments.push({
+              participation: { ...existingPart, player: registryMatch },
+              teamId: u.teamId,
+              teamName: u.teamName,
+            })
+            continue
+          }
         } else {
-          // Create new player + participation
+          // Create new player
           const { data: newPlayer, error: playerError } = await supabase
             .from('players')
             .insert({ name: u.spokenName.trim(), mobile_number: null })
             .select()
             .single()
           if (playerError) continue
-
-          const { data: newParticipation, error: partError } = await supabase
-            .from('participation')
-            .insert({
-              match_id: matchId,
-              player_id: newPlayer.id,
-              status: 'playing',
-              is_guest: false,
-              added_by_organizer: true,
-              responded_at: new Date().toISOString(),
-            })
-            .select()
-            .single()
-          if (partError) continue
-
-          allAssignments.push({
-            participation: {
-              id: newParticipation.id,
-              match_id: matchId,
-              player_id: newPlayer.id,
-              status: 'playing',
-              is_guest: false,
-              added_by_organizer: true,
-              responded_at: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-              player: newPlayer,
-            },
-            teamId: u.teamId,
-            teamName: u.teamName,
-          })
+          playerId = newPlayer.id
+          playerRecord = newPlayer
         }
+
+        // Create participation
+        const { data: newParticipation, error: partError } = await supabase
+          .from('participation')
+          .insert({
+            match_id: matchId,
+            player_id: playerId,
+            status: 'playing',
+            is_guest: false,
+            added_by_organizer: true,
+            responded_at: new Date().toISOString(),
+          })
+          .select()
+          .single()
+        if (partError) continue
+
+        const part: Participation = {
+          id: newParticipation.id,
+          match_id: matchId,
+          player_id: playerId,
+          status: 'playing',
+          is_guest: false,
+          added_by_organizer: true,
+          responded_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          player: playerRecord,
+        }
+
+        createdThisSession.push({ name: u.spokenName.trim(), participation: part })
+        allAssignments.push({ participation: part, teamId: u.teamId, teamName: u.teamName })
       }
 
       onAssignments(allAssignments)

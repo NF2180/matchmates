@@ -3,8 +3,26 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Match } from '../types'
 
+interface MatchWithInnings extends Match {
+  innings?: Array<{
+    id: string
+    innings_number: number
+    status: string
+    batting_team_id: string
+    bowling_team_id: string
+    overs_limit: number
+    target: number | null
+  }>
+  teamNames?: Record<string, string>
+}
+
+interface DateGroup {
+  date: string
+  matches: MatchWithInnings[]
+}
+
 export default function Home() {
-  const [matches, setMatches] = useState<Match[]>([])
+  const [groups, setGroups] = useState<DateGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -12,18 +30,54 @@ export default function Home() {
     async function loadMatches() {
       setLoading(true)
       setError(null)
+
       const { data, error } = await supabase
         .from('matches')
         .select('*, ground:grounds(*)')
         .order('match_date', { ascending: false })
         .order('created_at', { ascending: false })
-        .limit(50)
+        .limit(100)
 
-      if (error) {
-        setError(error.message)
-      } else {
-        setMatches(data as Match[])
+      if (error) { setError(error.message); setLoading(false); return }
+
+      const matches = (data as MatchWithInnings[]) ?? []
+
+      // Load innings and team names for completed/live matches
+      for (const match of matches) {
+        if (match.status === 'completed' || match.status === 'live') {
+          const { data: innings } = await supabase
+            .from('innings')
+            .select('id, innings_number, status, batting_team_id, bowling_team_id, overs_limit, target')
+            .eq('match_id', match.id)
+            .order('innings_number', { ascending: true })
+          match.innings = innings ?? []
+
+          if (match.innings.length > 0) {
+            const teamIds = [...new Set(match.innings.flatMap((i) => [i.batting_team_id, i.bowling_team_id]))]
+            const { data: teams } = await supabase
+              .from('teams')
+              .select('id, name')
+              .in('id', teamIds)
+            match.teamNames = Object.fromEntries((teams ?? []).map((t) => [t.id, t.name]))
+          }
+        }
       }
+
+      // Group by date, ordered most recent first
+      const byDate = new Map<string, MatchWithInnings[]>()
+      for (const match of matches) {
+        const list = byDate.get(match.match_date) ?? []
+        // Within a date, sort ascending by created_at so Game 1 = earliest
+        list.push(match)
+        byDate.set(match.match_date, list)
+      }
+
+      const grouped: DateGroup[] = Array.from(byDate.entries()).map(([date, ms]) => ({
+        date,
+        matches: [...ms].sort((a, b) => a.created_at.localeCompare(b.created_at)),
+      }))
+
+      setGroups(grouped)
       setLoading(false)
     }
     loadMatches()
@@ -45,13 +99,7 @@ export default function Home() {
         + Create Match
       </Link>
 
-      <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">
-        Recent Matches
-      </h2>
-
-      {loading && (
-        <div className="text-zinc-500 text-sm py-8 text-center">Loading matches…</div>
-      )}
+      {loading && <div className="text-zinc-500 text-sm py-8 text-center">Loading matches…</div>}
 
       {error && (
         <div className="text-red-400 text-sm py-4 px-3 bg-red-500/10 rounded-lg border border-red-500/20">
@@ -59,35 +107,28 @@ export default function Home() {
         </div>
       )}
 
-      {!loading && !error && matches.length === 0 && (
+      {!loading && !error && groups.length === 0 && (
         <div className="text-zinc-500 text-sm py-8 text-center border border-dashed border-zinc-700 rounded-xl">
           No matches yet. Create your first one above.
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
-        {matches.map((match) => (
-          <Link
-            key={match.id}
-            to={`/match/${match.id}`}
-            className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 active:bg-zinc-800 transition-colors"
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-semibold text-white">{match.match_name}</span>
-              <StatusBadge status={match.status} />
+      <div className="flex flex-col gap-6">
+        {groups.map((group) => (
+          <div key={group.date}>
+            <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">
+              {formatDate(group.date)}
+            </h2>
+            <div className="flex flex-col gap-2">
+              {group.matches.map((match, i) => (
+                <MatchCard
+                  key={match.id}
+                  match={match}
+                  gameNumber={group.matches.length > 1 ? i + 1 : null}
+                />
+              ))}
             </div>
-            <div className="text-sm text-zinc-400 flex items-center gap-2">
-              <span>{formatDate(match.match_date)}</span>
-              {match.match_time && <span>· {formatTime(match.match_time)}</span>}
-            </div>
-            {match.ground?.name && (
-              <div className="text-xs text-zinc-500 mt-1">📍 {match.ground.name}</div>
-            )}
-            {match.result_summary && (
-              <div className="text-xs text-emerald-400 mt-1 font-medium">{match.result_summary}</div>
-            )}
-            <div className="text-xs text-zinc-600 mt-2 font-mono">{match.match_code}</div>
-          </Link>
+          </div>
         ))}
       </div>
 
@@ -98,6 +139,66 @@ export default function Home() {
   )
 }
 
+function MatchCard({ match, gameNumber }: { match: MatchWithInnings; gameNumber: number | null }) {
+  const result = getResultText(match)
+
+  return (
+    <Link
+      to={`/match/${match.id}`}
+      className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 active:bg-zinc-800 transition-colors"
+    >
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2 min-w-0">
+          {gameNumber && (
+            <span className="text-xs text-emerald-400 font-semibold shrink-0">
+              Game {gameNumber}
+            </span>
+          )}
+          <span className="font-semibold text-white truncate">{match.match_name}</span>
+        </div>
+        <StatusBadge status={match.status} />
+      </div>
+
+      {match.match_time && (
+        <div className="text-xs text-zinc-500 mt-0.5">{formatTime(match.match_time)}</div>
+      )}
+
+      {match.ground?.name && (
+        <div className="text-xs text-zinc-500 mt-0.5">📍 {match.ground.name}</div>
+      )}
+
+      {result && (
+        <div className="text-xs text-emerald-400 font-medium mt-1.5">{result}</div>
+      )}
+
+      {!result && match.innings && match.innings.length > 0 && (
+        <div className="text-xs text-zinc-500 mt-1.5">
+          {match.innings.map((inn) => {
+            const teamName = match.teamNames?.[inn.batting_team_id] ?? 'Team'
+            return (
+              <span key={inn.id} className="mr-3">
+                {teamName}: {inn.status === 'active' ? 'batting…' : 'completed'}
+              </span>
+            )
+          })}
+        </div>
+      )}
+    </Link>
+  )
+}
+
+function getResultText(match: MatchWithInnings): string | null {
+  if (match.result_summary) return match.result_summary
+  if (!match.innings || match.innings.length < 2) return null
+
+  const inn1 = match.innings[0]
+  const inn2 = match.innings[1]
+  if (inn1.status !== 'completed' || inn2.status !== 'completed') return null
+
+  // We don't have delivery tallies here — use result_summary if available, otherwise just show status
+  return null
+}
+
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     created: 'bg-blue-500/15 text-blue-400',
@@ -106,7 +207,7 @@ function StatusBadge({ status }: { status: string }) {
     cancelled: 'bg-red-500/15 text-red-400',
   }
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${styles[status] ?? styles.created}`}>
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${styles[status] ?? styles.created}`}>
       {status}
     </span>
   )
@@ -114,6 +215,12 @@ function StatusBadge({ status }: { status: string }) {
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+
+  if (d.toDateString() === today.toDateString()) return 'Today'
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 

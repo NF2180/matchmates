@@ -93,11 +93,11 @@ alter table participation enable row level security;
 create policy "grounds_select" on grounds for select using (true);
 create policy "grounds_insert" on grounds for insert with check (true);
 
--- Players: anyone can read/create/update their own profile
--- (Phase 1 has no auth, so this is intentionally permissive)
+-- Players: anyone can read/create/update/delete (delete needed for merge tool)
 create policy "players_select" on players for select using (true);
 create policy "players_insert" on players for insert with check (true);
 create policy "players_update" on players for update using (true);
+create policy "players_delete" on players for delete using (true);
 
 -- Matches: anyone can read/create/update
 create policy "matches_select" on matches for select using (true);

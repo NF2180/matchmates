@@ -11,7 +11,6 @@ export default function MatchDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [gameNumber, setGameNumber] = useState<number | null>(null)
 
   useEffect(() => {
     async function loadMatch(matchId: string) {
@@ -32,21 +31,6 @@ export default function MatchDetail() {
 
       const m = matchData as Match
       setMatch(m)
-
-      // Compute Game N: count matches on same date+ground, sorted by created_at
-      if (m.match_date && m.ground_id) {
-        const { data: siblings } = await supabase
-          .from('matches')
-          .select('id, created_at')
-          .eq('match_date', m.match_date)
-          .eq('ground_id', m.ground_id)
-          .order('created_at', { ascending: true })
-
-        if (siblings && siblings.length > 1) {
-          const pos = siblings.findIndex((s: { id: string }) => s.id === matchId)
-          if (pos >= 0) setGameNumber(pos + 1)
-        }
-      }
 
       const { data: participationData } = await supabase
         .from('participation')
@@ -95,10 +79,7 @@ export default function MatchDetail() {
     <div className="flex flex-col flex-1 px-4 pb-10">
       <header className="pt-6 pb-4">
         <Link to="/" className="text-sm text-zinc-500 mb-2 inline-block">← Back</Link>
-        <h1 className="text-xl font-bold text-white">
-          {gameNumber && <span className="text-emerald-400 text-base font-medium mr-2">Game {gameNumber}</span>}
-          {match.match_name}
-        </h1>
+        <h1 className="text-xl font-bold text-white">{match.match_name}</h1>
         <div className="text-sm text-zinc-400 mt-1">
           {formatDate(match.match_date)}
           {match.match_time && ` · ${formatTime(match.match_time)}`}
