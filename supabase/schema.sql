@@ -104,7 +104,8 @@ create policy "matches_select" on matches for select using (true);
 create policy "matches_insert" on matches for insert with check (true);
 create policy "matches_update" on matches for update using (true);
 
--- Participation: anyone can read/create/update
+-- Participation: anyone can read/create/update/delete
 create policy "participation_select" on participation for select using (true);
 create policy "participation_insert" on participation for insert with check (true);
 create policy "participation_update" on participation for update using (true);
+create policy "participation_delete" on participation for delete using (true);
