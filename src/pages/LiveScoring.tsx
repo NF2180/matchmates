@@ -221,7 +221,15 @@ export default function LiveScoring() {
       }
 
       // Over complete: need next bowler
-      if (newState.balls_in_current_over === 0 && newState.overs_completed > 0 && !newState.is_complete) {
+      // Only trigger on legal deliveries — a wide/no-ball never completes an over,
+      // so if balls_in_current_over === 0 after an illegal ball it means we're
+      // still at the start of the over, not at the end of one.
+      if (
+        opts.isLegal &&
+        newState.balls_in_current_over === 0 &&
+        newState.overs_completed > 0 &&
+        !newState.is_complete
+      ) {
         setOverEndState('needs_bowler')
         return
       }

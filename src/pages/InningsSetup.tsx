@@ -41,7 +41,20 @@ export default function InningsSetup() {
     }
     const m = matchData as Match
     setMatch(m)
-    setOversLimit(m.overs?.toString() ?? '10')
+
+    // For innings 2, default overs to whatever innings 1 was actually played at,
+    // not the match's stored overs value (which may differ if organiser changed it).
+    if (inningsNumber === 2) {
+      const { data: inn1 } = await supabase
+        .from('innings')
+        .select('overs_limit')
+        .eq('match_id', matchId)
+        .eq('innings_number', 1)
+        .maybeSingle()
+      setOversLimit(inn1?.overs_limit?.toString() ?? m.overs?.toString() ?? '10')
+    } else {
+      setOversLimit(m.overs?.toString() ?? '10')
+    }
 
     // Load teams
     const { data: teams } = await supabase

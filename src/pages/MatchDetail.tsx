@@ -168,7 +168,7 @@ export default function MatchDetail() {
         to={`/match/${match.id}/duplicate`}
         className="w-full bg-zinc-800 border border-zinc-700 text-zinc-400 font-medium rounded-xl py-3 text-center text-sm mb-6"
       >
-        ⧉ Duplicate This Match
+        + New Match (from this one)
       </Link>
 
       <div className="grid grid-cols-3 gap-2 mb-6">
