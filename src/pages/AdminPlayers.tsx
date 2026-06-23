@@ -49,26 +49,46 @@ export default function AdminPlayers() {
     }
   }
 
-  async function bulkAddToRegistry(e: React.FormEvent) {
-    e.preventDefault()
+  const [bulkRegistryStep, setBulkRegistryStep] = useState<'paste' | 'review'>('paste')
+  const [bulkRegistryRows, setBulkRegistryRows] = useState<Array<{
+    inputName: string
+    existingMatch: { id: string; name: string } | null
+    useExisting: boolean
+  }>>([])
+
+  async function prepareBulkRegistry() {
     if (!bulkRegistryText.trim()) return
     setBulkRegistryAdding(true)
-    setBulkRegistryResult(null)
-    const names = bulkRegistryText
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
+    const names = bulkRegistryText.split('\n').map((l) => l.trim()).filter(Boolean)
+    const candidates = players.map((p) => ({ id: p.id, name: p.name }))
+    const { fuzzyMatchName } = await import('../lib/fuzzyMatch')
+    const rows = names.map((inputName) => {
+      const result = fuzzyMatchName(inputName, candidates)
+      return {
+        inputName,
+        existingMatch: result ? { id: result.candidate.id, name: result.candidate.name } : null,
+        useExisting: !!result,
+      }
+    })
+    setBulkRegistryRows(rows)
+    setBulkRegistryAdding(false)
+    setBulkRegistryStep('review')
+  }
+
+  async function applyBulkRegistry() {
+    setBulkRegistryAdding(true)
     let added = 0
     let skipped = 0
-    for (const name of names) {
-      const { error } = await supabase
-        .from('players')
-        .insert({ name, mobile_number: null })
+    for (const row of bulkRegistryRows) {
+      if (row.useExisting) { skipped++; continue }
+      const { error } = await supabase.from('players').insert({ name: row.inputName, mobile_number: null })
       if (error) skipped++
       else added++
     }
-    setBulkRegistryResult(`Added ${added} to registry${skipped > 0 ? `, ${skipped} skipped` : ''}`)
+    setBulkRegistryResult(`Added ${added} to registry${skipped > 0 ? `, ${skipped} merged/skipped` : ''}`)
     setBulkRegistryText('')
+    setBulkRegistryStep('paste')
+    setBulkRegistryRows([])
     await loadPlayers()
     setBulkRegistryAdding(false)
   }
@@ -210,17 +230,51 @@ export default function AdminPlayers() {
           </form>
         )}
 
-        {showBulkRegistry && (
-          <form onSubmit={bulkAddToRegistry} className="flex flex-col gap-2">
+        {showBulkRegistry && bulkRegistryStep === 'paste' && (
+          <form onSubmit={(e) => { e.preventDefault(); prepareBulkRegistry() }} className="flex flex-col gap-2">
             <textarea value={bulkRegistryText} onChange={(e) => setBulkRegistryText(e.target.value)} placeholder={'Names, one per line:\nRaj\nNitin\nVipul'} className="input min-h-[120px] resize-none" autoFocus />
             {bulkRegistryResult && <p className="text-sm text-emerald-400">{bulkRegistryResult}</p>}
             <div className="flex gap-2">
               <button type="submit" disabled={bulkRegistryAdding || !bulkRegistryText.trim()} className="flex-1 bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm disabled:opacity-50">
-                {bulkRegistryAdding ? 'Adding…' : 'Add to Registry'}
+                {bulkRegistryAdding ? 'Checking…' : 'Review'}
               </button>
               <button type="button" onClick={() => { setShowBulkRegistry(false); setBulkRegistryText(''); setBulkRegistryResult(null) }} className="px-4 bg-zinc-800 text-zinc-400 rounded-lg text-sm">✕</button>
             </div>
           </form>
+        )}
+
+        {showBulkRegistry && bulkRegistryStep === 'review' && (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-zinc-400">Review before adding to registry:</p>
+            <div className="flex flex-col gap-1.5 max-h-[300px] overflow-y-auto">
+              {bulkRegistryRows.map((row, i) => (
+                <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-white">{row.inputName}</span>
+                    {row.existingMatch ? (
+                      <button
+                        onClick={() => setBulkRegistryRows((prev) => prev.map((r, ri) => ri === i ? { ...r, useExisting: !r.useExisting } : r))}
+                        className={`text-xs px-2 py-0.5 rounded border ${row.useExisting ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'}`}
+                      >
+                        {row.useExisting ? `✓ Same as "${row.existingMatch.name}"` : '+ Create new'}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-emerald-400">New</span>
+                    )}
+                  </div>
+                  {row.existingMatch && (
+                    <p className="text-xs text-zinc-500 mt-0.5">Close match found: {row.existingMatch.name} — tap to toggle</p>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={applyBulkRegistry} disabled={bulkRegistryAdding} className="flex-1 bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm disabled:opacity-50">
+                {bulkRegistryAdding ? 'Adding…' : `Add ${bulkRegistryRows.filter((r) => !r.useExisting).length} New Players`}
+              </button>
+              <button onClick={() => setBulkRegistryStep('paste')} className="px-4 bg-zinc-800 text-zinc-400 rounded-lg text-sm">Back</button>
+            </div>
+          </div>
         )}
 
         <MergePlayersTool players={players} onMerged={loadPlayers} />

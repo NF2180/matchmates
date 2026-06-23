@@ -144,6 +144,9 @@ export default function MatchScorecard() {
 
   const active = bundles[activeTab]
 
+  // Compute detailed result string when both innings are complete
+  const resultBanner = computeResultBanner(bundles, match)
+
   return (
     <div className="flex flex-col flex-1 px-4 pb-10">
       <header className="pt-6 pb-4">
@@ -151,6 +154,12 @@ export default function MatchScorecard() {
         <h1 className="text-xl font-bold text-white">{match.match_name}</h1>
         <p className="text-sm text-zinc-400 mt-0.5">Scorecard</p>
       </header>
+
+      {resultBanner && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 mb-4 text-center">
+          <p className="text-emerald-400 font-semibold text-sm">{resultBanner}</p>
+        </div>
+      )}
 
       {bundles.length > 1 && (
         <div className="flex gap-2 mb-5">
@@ -333,6 +342,35 @@ function InningsCard({ bundle }: { bundle: InningsBundle }) {
       </div>
     </div>
   )
+}
+
+function computeResultBanner(bundles: InningsBundle[], match: Match): string | null {
+  if (bundles.length < 2) return null
+  if (match.status !== 'completed') return null
+
+  const inn1 = bundles[0]
+  const inn2 = bundles[1]
+
+  const runs1 = inn1.state.total_runs
+  const runs2 = inn2.state.total_runs
+  const wickets2 = inn2.state.wickets
+  const teamSize2 = inn2.battingPlayers.length
+
+  const totalBalls2 = inn2.innings.overs_limit * 6
+  const ballsUsed2 = inn2.state.balls_bowled_total
+  const ballsToSpare = totalBalls2 - ballsUsed2
+
+  if (runs2 > runs1) {
+    // Chasing side won
+    const wicketsInHand = Math.max(0, (teamSize2 - 1) - wickets2)
+    const spare = ballsToSpare > 0 ? ` and ${ballsToSpare} ball${ballsToSpare !== 1 ? 's' : ''} to spare` : ''
+    return `${inn2.battingTeam.name} won by ${wicketsInHand} wicket${wicketsInHand !== 1 ? 's' : ''}${spare}`
+  } else if (runs1 > runs2) {
+    const margin = runs1 - runs2
+    return `${inn1.battingTeam.name} won by ${margin} run${margin !== 1 ? 's' : ''}`
+  } else {
+    return 'Match tied'
+  }
 }
 
 function dismissalText(

@@ -432,25 +432,49 @@ export default function LiveScoring() {
         </div>
 
         {/* Current over balls */}
-        <div className="flex justify-center gap-1.5 mt-3">
-          {currentOverDeliveries.map((d, i) => (
-            <div
-              key={i}
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                d.is_wicket
-                  ? 'bg-red-500 text-white'
-                  : d.extra_type === 'wide'
-                    ? 'bg-zinc-600 text-zinc-200'
-                    : d.extra_type === 'no_ball'
-                      ? 'bg-amber-500 text-zinc-950'
-                      : d.total_runs === 4 || d.total_runs === 6
-                        ? 'bg-emerald-500 text-zinc-950'
-                        : 'bg-zinc-700 text-zinc-200'
-              }`}
-            >
-              {d.is_wicket ? 'W' : d.extra_type === 'wide' ? 'Wd' : d.extra_type === 'no_ball' ? 'Nb' : d.total_runs}
-            </div>
-          ))}
+        <div className="flex justify-center gap-1 mt-3 flex-wrap">
+          {currentOverDeliveries.map((d, i) => {
+            const extraRuns = d.extra_runs ?? 0
+            const batterRuns = d.batter_runs ?? 0
+            const isWide = d.extra_type === 'wide'
+            const isNoBall = d.extra_type === 'no_ball'
+            const isBoundary = !isWide && !isNoBall && (d.total_runs === 4 || d.total_runs === 6)
+
+            // Build label
+            let label: string
+            if (d.is_wicket) {
+              label = isWide ? 'W(wd)' : isNoBall ? 'W(nb)' : 'W'
+              if (batterRuns > 0) label += `+${batterRuns}`
+            } else if (isWide) {
+              label = extraRuns > 1 ? `wd+${extraRuns - 1}` : 'wd'
+            } else if (isNoBall) {
+              label = batterRuns > 0 ? `nb+${batterRuns}` : 'nb'
+            } else {
+              label = String(d.total_runs)
+            }
+
+            const isWide2 = label.length > 2
+            const bgClass = d.is_wicket
+              ? 'bg-red-500 text-white'
+              : isWide
+                ? 'bg-zinc-600 text-zinc-200'
+                : isNoBall
+                  ? 'bg-amber-500 text-zinc-950'
+                  : isBoundary
+                    ? 'bg-emerald-500 text-zinc-950'
+                    : 'bg-zinc-700 text-zinc-200'
+
+            return (
+              <div
+                key={i}
+                className={`h-7 flex items-center justify-center text-[10px] font-bold ${bgClass} ${
+                  isWide2 ? 'rounded-full px-1.5 min-w-[28px]' : 'w-7 rounded-full'
+                }`}
+              >
+                {label}
+              </div>
+            )
+          })}
           {Array.from({ length: Math.max(0, 6 - currentOverDeliveries.filter((d) => d.is_legal).length) }).map((_, i) => (
             <div key={`empty-${i}`} className="w-7 h-7 rounded-full border border-zinc-700" />
           ))}
