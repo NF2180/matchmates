@@ -20,6 +20,7 @@ export interface Match {
   id: string
   match_code: string
   join_token: string
+  admin_token: string | null
   match_name: string
   sport: string
   format: string | null
@@ -35,6 +36,7 @@ export interface Match {
   created_at: string
   // joined data
   ground?: Ground | null
+
 }
 
 export type ParticipationStatus = 'pending' | 'playing' | 'not_playing'

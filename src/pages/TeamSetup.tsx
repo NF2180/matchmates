@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAdminAccess } from '../hooks/useAdminAccess'
 import {
   ensureTeamsExist,
   loadTeamMembers,
@@ -21,6 +22,8 @@ const ROLE_LABELS: Record<PlayerRole, string> = {
 
 export default function TeamSetup() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const adminState = useAdminAccess(id)
   const [match, setMatch] = useState<Match | null>(null)
   const [participants, setParticipants] = useState<Participation[]>([])
   const [teamA, setTeamA] = useState<Team | null>(null)
@@ -117,6 +120,17 @@ export default function TeamSetup() {
       await assignToTeam(id, a.participation.id, a.teamId)
     }
     await loadAll(id)
+  }
+if (adminState === 'checking') {
+    return <div className="text-zinc-500 text-sm py-12 text-center">Loading…</div>
+  }
+  if (adminState === 'viewer') {
+    return (
+      <div className="px-4 py-12 text-center">
+        <p className="text-zinc-400 text-sm mb-3">You need to be the match organiser to access Team Setup.</p>
+        <button onClick={() => navigate(id ? `/match/${id}` : '/')} className="text-emerald-400 text-sm">← Back to match</button>
+      </div>
+    )
   }
 
   if (loading) {

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { generateMatchCode, generateJoinToken } from '../lib/matchUtils'
-import { getStoredPlayerId } from '../lib/identity'
+import { generateMatchCode, generateJoinToken, generateAdminToken } from '../lib/matchUtils'
+import { getStoredPlayerId, setStoredAdminToken } from '../lib/identity'
 import type { Match, Player } from '../types'
 
 const FORMATS = ['T20', 'T10', 'ODI', 'Custom']
@@ -111,6 +111,7 @@ export default function DuplicateMatch() {
 
     try {
       const organizerId = getStoredPlayerId()
+      const adminToken = generateAdminToken()
 
       // Create the new match
       const { data: newMatch, error: matchError } = await supabase
@@ -118,6 +119,7 @@ export default function DuplicateMatch() {
         .insert({
           match_code: generateMatchCode(),
           join_token: generateJoinToken(),
+          admin_token: adminToken,
           match_name: matchName.trim(),
           sport: sourceMatch.sport,
           format,
@@ -132,6 +134,8 @@ export default function DuplicateMatch() {
         .single()
 
       if (matchError) throw matchError
+
+      setStoredAdminToken(newMatch.id, adminToken)
 
       // Add all players to the new match as 'playing'
       for (const entry of players) {

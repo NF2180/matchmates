@@ -7,6 +7,7 @@ import { loadDeliveries, saveDelivery, deleteLastDelivery, completeInnings, comp
 import type { InningsRow } from '../lib/scoringDb'
 import WicketModal from '../components/WicketModal'
 import type { WicketResult } from '../components/WicketModal'
+import { useAdminAccess } from '../hooks/useAdminAccess'
 import type { Player } from '../types'
 
 type OverEndState = 'idle' | 'needs_bowler' | 'confirmed'
@@ -15,6 +16,7 @@ export default function LiveScoring() {
   const { id: matchId, inningsId } = useParams<{ id: string; inningsId: string }>()
   const location = useLocation()
   const navigate = useNavigate()
+  const adminState = useAdminAccess(matchId)
 
   // Initial striker/non-striker/bowler passed from InningsSetup via router state
   const initState = location.state as {
@@ -374,6 +376,16 @@ export default function LiveScoring() {
     if (newState.balls_in_current_over === 0 && newState.overs_completed > 0) {
       setOverEndState('needs_bowler')
     }
+  }
+
+  if (adminState === 'checking') return <div className="text-zinc-500 text-sm py-12 text-center">Loading innings…</div>
+  if (adminState === 'viewer') {
+    return (
+      <div className="px-4 py-12 text-center">
+        <p className="text-zinc-400 text-sm mb-3">Live scoring is organiser-only. View the scorecard instead.</p>
+        <button onClick={() => navigate(matchId ? `/match/${matchId}/scorecard` : '/')} className="text-emerald-400 text-sm">View Scorecard →</button>
+      </div>
+    )
   }
 
   if (loading) return <div className="text-zinc-500 text-sm py-12 text-center">Loading innings…</div>

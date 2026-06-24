@@ -1,0 +1,46 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { getStoredAdminToken } from '../lib/identity'
+
+export type AdminAccessState = 'checking' | 'admin' | 'viewer'
+
+export function useAdminAccess(matchId: string | undefined): AdminAccessState {
+  const [state, setState] = useState<AdminAccessState>('checking')
+
+  useEffect(() => {
+    if (!matchId) {
+      setState('viewer')
+      return
+    }
+
+    const localToken = getStoredAdminToken(matchId)
+    if (!localToken) {
+      setState('viewer')
+      return
+    }
+
+    let cancelled = false
+
+    async function check() {
+      const { data, error } = await supabase
+        .from('matches')
+        .select('admin_token')
+        .eq('id', matchId)
+        .single()
+
+      if (cancelled) return
+
+      if (error || !data) {
+        setState('viewer')
+        return
+      }
+
+      setState(data.admin_token === localToken ? 'admin' : 'viewer')
+    }
+
+    check()
+    return () => { cancelled = true }
+  }, [matchId])
+
+  return state
+}

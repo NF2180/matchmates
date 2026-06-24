@@ -4,7 +4,12 @@ import { supabase } from '../lib/supabase'
 import type { Player } from '../types'
 import MergePlayersTool from '../components/MergePlayersTool'
 
+const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET as string | undefined
+
 export default function AdminPlayers() {
+  const [unlocked, setUnlocked] = useState(!ADMIN_SECRET)
+  const [secretInput, setSecretInput] = useState('')
+  const [secretError, setSecretError] = useState(false)
   const [players, setPlayers] = useState<Player[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -198,6 +203,38 @@ export default function AdminPlayers() {
   })
 
   const missingMobileCount = players.filter((p) => !p.mobile_number && !isGuestMobile(p.mobile_number)).length
+
+  if (!unlocked) {
+    return (
+      <div className="flex flex-col flex-1 px-4 pb-10">
+        <header className="pt-6 pb-4">
+          <Link to="/" className="text-sm text-zinc-500 mb-2 inline-block">← Back</Link>
+          <h1 className="text-xl font-bold text-white">Admin · Players</h1>
+        </header>
+        <div className="flex flex-col gap-3 mt-4">
+          <p className="text-sm text-zinc-400">Enter the admin password to continue.</p>
+          <input
+            type="password"
+            value={secretInput}
+            onChange={(e) => { setSecretInput(e.target.value); setSecretError(false) }}
+            placeholder="Admin password"
+            className="input"
+            autoFocus
+          />
+          {secretError && <p className="text-red-400 text-sm">Incorrect password.</p>}
+          <button
+            onClick={() => {
+              if (secretInput === ADMIN_SECRET) { setUnlocked(true) }
+              else { setSecretError(true) }
+            }}
+            className="w-full bg-emerald-500 text-zinc-950 font-semibold rounded-xl py-3 text-sm"
+          >
+            Unlock
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col flex-1 px-4 pb-10">

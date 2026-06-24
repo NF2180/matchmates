@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { createInnings } from '../lib/scoringDb'
+import { useAdminAccess } from '../hooks/useAdminAccess'
 import type { Match, Team, Player } from '../types'
 
 export default function InningsSetup() {
   const { id, inningsNum } = useParams<{ id: string; inningsNum: string }>()
   const navigate = useNavigate()
   const inningsNumber = parseInt(inningsNum ?? '1', 10)
+  const adminState = useAdminAccess(id)
 
   const [match, setMatch] = useState<Match | null>(null)
   const [battingTeam, setBattingTeam] = useState<Team | null>(null)
@@ -158,6 +160,16 @@ export default function InningsSetup() {
     } finally {
       setStarting(false)
     }
+  }
+
+  if (adminState === 'checking') return <div className="text-zinc-500 text-sm py-12 text-center">Loading…</div>
+  if (adminState === 'viewer') {
+    return (
+      <div className="px-4 py-12 text-center">
+        <p className="text-zinc-400 text-sm mb-3">You need to be the match organiser to set up an innings.</p>
+        <button onClick={() => navigate(id ? `/match/${id}` : '/')} className="text-emerald-400 text-sm">← Back to match</button>
+      </div>
+    )
   }
 
   if (loading) return <div className="text-zinc-500 text-sm py-12 text-center">Loading…</div>

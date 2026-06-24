@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+iimport { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { generateMatchCode, generateJoinToken } from '../lib/matchUtils'
-import { getStoredPlayerId } from '../lib/identity'
+import { generateMatchCode, generateJoinToken, generateAdminToken } from '../lib/matchUtils'
+import { getStoredPlayerId, setStoredAdminToken } from '../lib/identity'
 import type { Ground } from '../types'
 
 const FORMATS = ['T20', 'T10', 'ODI', 'Custom']
@@ -58,12 +58,14 @@ export default function CreateMatch() {
       }
 
       const organizerId = getStoredPlayerId()
+      const adminToken = generateAdminToken()
 
       const { data: matchData, error: matchError } = await supabase
         .from('matches')
         .insert({
           match_code: generateMatchCode(),
           join_token: generateJoinToken(),
+          admin_token: adminToken,
           match_name: matchName.trim(),
           sport: 'cricket',
           format,
@@ -77,7 +79,9 @@ export default function CreateMatch() {
         .select()
         .single()
 
-      if (matchError) throw matchError
+      iif (matchError) throw matchError
+
+      setStoredAdminToken(matchData.id, adminToken)
 
       navigate(`/match/${matchData.id}`)
     } catch (err) {
