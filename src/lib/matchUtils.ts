@@ -4,18 +4,15 @@ export function generateMatchCode(): string {
 }
 
 export function generateJoinToken(): string {
-  // URL-safe random token
   const bytes = new Uint8Array(12)
   crypto.getRandomValues(bytes)
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 export function generateAdminToken(): string {
-  // Standard UUID v4 — stored in DB and compared against localStorage
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
   }
-  // Fallback for older environments
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
   bytes[6] = (bytes[6] & 0x0f) | 0x40

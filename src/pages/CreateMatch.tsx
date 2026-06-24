@@ -1,4 +1,4 @@
-iimport { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { generateMatchCode, generateJoinToken, generateAdminToken } from '../lib/matchUtils'
@@ -79,7 +79,7 @@ export default function CreateMatch() {
         .select()
         .single()
 
-      iif (matchError) throw matchError
+      if (matchError) throw matchError
 
       setStoredAdminToken(matchData.id, adminToken)
 
