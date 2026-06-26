@@ -152,9 +152,7 @@ export default function InningsSetup() {
         target
       )
 
-      navigate(`/match/${match.id}/scoring/${innings.id}`, {
-        state: { strikerId: striker, nonStrikerId: nonStriker, bowlerId: bowler }
-      })
+      navigate(`/match/${match.id}/scoring/${innings.id}?striker=${striker}&nonStriker=${nonStriker}&bowler=${bowler}`)
     } catch (err) {
       setStartError(err instanceof Error ? err.message : 'Failed to start innings')
     } finally {

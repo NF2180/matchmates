@@ -17,13 +17,12 @@ export default function LiveScoring() {
   const location = useLocation()
   const navigate = useNavigate()
   const adminState = useAdminAccess(matchId)
+  const searchParams = new URLSearchParams(location.search)
 
-  // Initial striker/non-striker/bowler passed from InningsSetup via router state
-  const initState = location.state as {
-    strikerId: string
-    nonStrikerId: string
-    bowlerId: string
-  } | null
+  // Player IDs passed via URL params (router state doesn't survive hash navigation on mobile)
+  const initStriker = searchParams.get('striker') ?? ''
+  const initNonStriker = searchParams.get('nonStriker') ?? ''
+  const initBowler = searchParams.get('bowler') ?? ''
 
   const [innings, setInnings] = useState<InningsRow | null>(null)
   const [deliveries, setDeliveries] = useState<Delivery[]>([])
@@ -34,10 +33,10 @@ export default function LiveScoring() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  // Striker/non-striker/bowler — initialised from router state, then managed locally
-  const [strikerId, setStrikerId] = useState(initState?.strikerId ?? '')
-  const [nonStrikerId, setNonStrikerId] = useState(initState?.nonStrikerId ?? '')
-  const [bowlerId, setBowlerId] = useState(initState?.bowlerId ?? '')
+  // Striker/non-striker/bowler — initialised from URL params, then managed locally
+  const [strikerId, setStrikerId] = useState(initStriker)
+  const [nonStrikerId, setNonStrikerId] = useState(initNonStriker)
+  const [bowlerId, setBowlerId] = useState(initBowler)
 
   // UI state
   const [showWicket, setShowWicket] = useState(false)
@@ -116,8 +115,8 @@ export default function LiveScoring() {
       const computed = computeInningsState(mapped, extract(batMembers ?? []).length, inn.overs_limit, inn.target)
       setState(computed)
 
-      // Restore current players from last delivery if we don't have init state
-      if (mapped.length > 0 && !initState) {
+      // Restore current players from last delivery if we don't have URL params
+      if (mapped.length > 0 && !initStriker) {
         const last = mapped[mapped.length - 1]
         const nextStriker = computed.current_striker_id ?? last.striker_id
         const nextNonStriker = computed.current_non_striker_id ?? last.non_striker_id
@@ -131,7 +130,7 @@ export default function LiveScoring() {
     } finally {
       setLoading(false)
     }
-  }, [inningsId, matchId, initState])
+  }, [inningsId, matchId, initStriker])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
