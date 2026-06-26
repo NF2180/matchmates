@@ -69,18 +69,18 @@ export default function LiveScoring() {
       // Load teams' players
       const { data: batMembers } = await supabase
         .from('team_members')
-        .select('participation:participation(player:players(*))')
+        .select('participation:participation_id(player_id, player:player_id(*))')
         .eq('team_id', inn.batting_team_id)
 
       const { data: bowlMembers } = await supabase
         .from('team_members')
-        .select('participation:participation(player:players(*))')
+        .select('participation:participation_id(player_id, player:player_id(*))')
         .eq('team_id', inn.bowling_team_id)
 
       const extract = (members: unknown[]): Player[] =>
         (members as Array<{ participation: { player: Player } }>)
           .map((m) => m.participation?.player)
-          .filter((p): p is Player => !!p)
+          .filter((p): p is Player => !!p && !!p.id)
 
       setBattingPlayers(extract(batMembers ?? []))
       setBowlingPlayers(extract(bowlMembers ?? []))
