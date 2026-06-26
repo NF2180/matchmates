@@ -85,7 +85,8 @@ export default function CreateMatch() {
 
       navigate(`/match/${matchData.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      const msg = err instanceof Error ? err.message : JSON.stringify(err)
+      setError(msg || 'Something went wrong')
     } finally {
       setSubmitting(false)
     }
