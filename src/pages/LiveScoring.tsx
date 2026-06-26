@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useLocation, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { computeInningsState, canBowlNextOver, oversDisplay } from '../lib/scoringEngine'
 import type { ExtraType, Delivery, WicketType, InningsState, BatterStats, BowlerStats } from '../lib/scoringEngine'
@@ -14,7 +14,6 @@ type OverEndState = 'idle' | 'needs_bowler' | 'confirmed'
 
 export default function LiveScoring() {
   const { id: matchId, inningsId, strikerId: urlStrikerId, nonStrikerId: urlNonStrikerId, bowlerId: urlBowlerId } = useParams<{ id: string; inningsId: string; strikerId?: string; nonStrikerId?: string; bowlerId?: string }>()
-  const location = useLocation()
   const navigate = useNavigate()
   const adminState = useAdminAccess(matchId)
 
