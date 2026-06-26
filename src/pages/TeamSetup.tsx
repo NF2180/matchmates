@@ -219,23 +219,7 @@ if (adminState === 'checking') {
         <p className="text-sm text-zinc-400">{match.match_name}</p>
       </header>
 
-      {showVoice && teamA && teamB ? (
-        <VoiceTeamAssign
-          matchId={id ?? ''}
-          teamA={teamA}
-          teamB={teamB}
-          participants={participants.filter((p) => p.status === 'playing')}
-          onAssignments={(assignments) => handleVoiceAssignments(assignments)}
-          onClose={() => setShowVoice(false)}
-        />
-      ) : (
-        <button
-          onClick={() => setShowVoice(true)}
-          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm mb-4 flex items-center justify-center gap-2"
-        >
-          🎙 Assign teams by voice
-        </button>
-      )}
+      
 
       <TeamColumn
         team={teamA}
