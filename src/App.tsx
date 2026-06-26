@@ -24,7 +24,6 @@ function App() {
         <Route path="/match/:id/attendance" element={<AttendanceDashboard />} />
         <Route path="/match/:id/teams" element={<TeamSetup />} />
         <Route path="/match/:id/innings/:inningsNum" element={<InningsSetup />} />
-        <Route path="/match/:id/scoring/:inningsId/:strikerId/:nonStrikerId/:bowlerId" element={<LiveScoring />} />
         <Route path="/match/:id/scoring/:inningsId" element={<LiveScoring />} />
         <Route path="/match/:id/scorecard" element={<MatchScorecard />} />
         <Route path="/match/:id/duplicate" element={<DuplicateMatch />} />

@@ -152,7 +152,8 @@ export default function InningsSetup() {
         target
       )
 
-      navigate(`/match/${match.id}/scoring/${innings.id}/${striker}/${nonStriker}/${bowler}`)
+      sessionStorage.setItem('innings_init', JSON.stringify({ strikerId: striker, nonStrikerId: nonStriker, bowlerId: bowler }))
+      navigate(`/match/${match.id}/scoring/${innings.id}`)
     } catch (err) {
       setStartError(err instanceof Error ? err.message : 'Failed to start innings')
     } finally {

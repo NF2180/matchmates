@@ -13,13 +13,15 @@ import type { Player } from '../types'
 type OverEndState = 'idle' | 'needs_bowler' | 'confirmed'
 
 export default function LiveScoring() {
-  const { id: matchId, inningsId, strikerId: urlStrikerId, nonStrikerId: urlNonStrikerId, bowlerId: urlBowlerId } = useParams<{ id: string; inningsId: string; strikerId?: string; nonStrikerId?: string; bowlerId?: string }>()
+  const { id: matchId, inningsId } = useParams<{ id: string; inningsId: string }>()
   const navigate = useNavigate()
   const adminState = useAdminAccess(matchId)
 
-  const initStriker = urlStrikerId ?? ''
-  const initNonStriker = urlNonStrikerId ?? ''
-  const initBowler = urlBowlerId ?? ''
+  // Player IDs stored in sessionStorage by InningsSetup before navigating
+  const initData = JSON.parse(sessionStorage.getItem('innings_init') ?? '{}')
+  const initStriker = initData.strikerId ?? ''
+  const initNonStriker = initData.nonStrikerId ?? ''
+  const initBowler = initData.bowlerId ?? ''
 
   const [innings, setInnings] = useState<InningsRow | null>(null)
   const [deliveries, setDeliveries] = useState<Delivery[]>([])
