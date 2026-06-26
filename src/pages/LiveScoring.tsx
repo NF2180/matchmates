@@ -18,12 +18,14 @@ export default function LiveScoring() {
   const navigate = useNavigate()
   const adminState = useAdminAccess(matchId)
 
-  // Initial striker/non-striker/bowler passed from InningsSetup via router state
-  const initState = location.state as {
+  // Initial striker/non-striker/bowler passed from InningsSetup via router state.
+  // Captured in a ref immediately so it survives re-renders caused by adminState changes.
+  const initStateRef = useRef(location.state as {
     strikerId: string
     nonStrikerId: string
     bowlerId: string
-  } | null
+  } | null)
+  const initState = initStateRef.current
 
   const [innings, setInnings] = useState<InningsRow | null>(null)
   const [deliveries, setDeliveries] = useState<Delivery[]>([])
