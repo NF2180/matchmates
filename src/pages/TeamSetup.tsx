@@ -35,8 +35,10 @@ export default function TeamSetup() {
   const [showVoice, setShowVoice] = useState(false)
   const [editingTeamName, setEditingTeamName] = useState<string | null>(null)
   const [teamNameInput, setTeamNameInput] = useState('')
-
   const [rolePickerFor, setRolePickerFor] = useState<string | null>(null)
+  const [addingPlayer, setAddingPlayer] = useState(false)
+  const [newPlayerName, setNewPlayerName] = useState('')
+  const [addingPlayerError, setAddingPlayerError] = useState<string | null>(null)
 
   const loadAll = useCallback(async (matchId: string) => {
     setLoading(true)
@@ -121,6 +123,63 @@ export default function TeamSetup() {
     }
     await loadAll(id)
   }
+
+  async function handleAddPlayer() {
+    if (!id || !newPlayerName.trim()) return
+    setAddingPlayerError(null)
+    try {
+      // Check if player exists in registry
+      const { data: existing } = await supabase
+        .from('players')
+        .select('*')
+        .ilike('name', newPlayerName.trim())
+        .limit(1)
+
+      let playerId: string
+      if (existing && existing.length > 0) {
+        playerId = existing[0].id
+      } else {
+        const { data: newPlayer, error } = await supabase
+          .from('players')
+          .insert({ name: newPlayerName.trim(), mobile_number: null })
+          .select()
+          .single()
+        if (error) throw error
+        playerId = newPlayer.id
+      }
+
+      // Check if already in this match
+      const { data: existingPart } = await supabase
+        .from('participation')
+        .select('*')
+        .eq('match_id', id)
+        .eq('player_id', playerId)
+        .limit(1)
+
+      if (existingPart && existingPart.length > 0) {
+        setAddingPlayerError('Player already in this match')
+        return
+      }
+
+      const { error: partError } = await supabase
+        .from('participation')
+        .insert({
+          match_id: id,
+          player_id: playerId,
+          status: 'playing',
+          is_guest: false,
+          added_by_organizer: true,
+          responded_at: new Date().toISOString(),
+        })
+      if (partError) throw partError
+
+      setNewPlayerName('')
+      setAddingPlayer(false)
+      await loadAll(id)
+    } catch (err) {
+      setAddingPlayerError(err instanceof Error ? err.message : 'Failed to add player')
+    }
+  }
 if (adminState === 'checking') {
     return <div className="text-zinc-500 text-sm py-12 text-center">Loading…</div>
   }
@@ -172,9 +231,9 @@ if (adminState === 'checking') {
       ) : (
         <button
           onClick={() => setShowVoice(true)}
-          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm mb-6 flex items-center justify-center gap-2"
+          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm mb-4 flex items-center justify-center gap-2"
         >
-          🎙 Voice Team Assignment
+          🎙 Assign teams by voice
         </button>
       )}
 
@@ -219,6 +278,43 @@ if (adminState === 'checking') {
       <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3 mt-2">
         Bench ({benchMembers.length})
       </h2>
+
+      {/* Inline add player */}
+      {addingPlayer ? (
+        <div className="flex flex-col gap-2 mb-3 bg-zinc-900 border border-zinc-700 rounded-xl p-3">
+          <input
+            type="text"
+            value={newPlayerName}
+            onChange={(e) => { setNewPlayerName(e.target.value); setAddingPlayerError(null) }}
+            placeholder="Player name"
+            className="input text-sm"
+            autoFocus
+          />
+          {addingPlayerError && <p className="text-red-400 text-xs">{addingPlayerError}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddPlayer}
+              className="flex-1 bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2 text-sm"
+            >
+              Add to Bench
+            </button>
+            <button
+              onClick={() => { setAddingPlayer(false); setNewPlayerName(''); setAddingPlayerError(null) }}
+              className="flex-1 bg-zinc-800 text-zinc-300 rounded-lg py-2 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAddingPlayer(true)}
+          className="w-full bg-zinc-900 border border-dashed border-zinc-700 text-zinc-400 rounded-xl py-2.5 text-sm mb-3"
+        >
+          + Add new player
+        </button>
+      )}
+
       <div className="flex flex-col gap-2 mb-6">
         {benchMembers.length === 0 && (
           <div className="text-zinc-600 text-sm py-3 text-center border border-dashed border-zinc-800 rounded-lg">

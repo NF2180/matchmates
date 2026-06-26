@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Team, Participation } from '../types'
 
-// Web Speech API minimal type declarations
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList
 }
@@ -63,12 +62,6 @@ interface Props {
 
 type MicState = 'idle' | 'listening' | 'processing'
 
-/**
- * Determines which team side (A or B) a spoken label refers to.
- * Handles common speech-recognition mishearings:
- *   Team A: "a", "ay", "eh", "alpha", "eight", "ate"
- *   Team B: "b", "be", "bee", "bi", "beta", "the"
- */
 function detectTeamSide(word: string): 'A' | 'B' | null {
   const w = word.toLowerCase().trim()
   const sideA = ['a', 'ay', 'eh', 'alpha', 'eight', 'ate', 'ae']
@@ -92,53 +85,59 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
     return () => { recognitionRef.current?.abort() }
   }, [])
 
-  function startListening() {
-    const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition
-    if (!SR) return
-    const recognition = new SR()
-    recognitionRef.current = recognition
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = 'en-IN'
+  function toggleListening() {
+    if (micState === 'listening') {
+      recognitionRef.current?.stop()
+      setMicState('processing')
+      setTimeout(() => {
+        parseAndPreview()
+        setMicState('idle')
+      }, 400)
+    } else {
+      const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition
+      if (!SR) return
+      const recognition = new SR()
+      recognitionRef.current = recognition
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.lang = 'en-IN'
 
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
-      let full = ''
-      for (let i = 0; i < e.results.length; i++) {
-        full += e.results[i][0].transcript + ' '
+      recognition.onresult = (e: SpeechRecognitionEvent) => {
+        let full = ''
+        for (let i = 0; i < e.results.length; i++) {
+          full += e.results[i][0].transcript + ' '
+        }
+        setTranscript(full.trim())
       }
-      setTranscript(full.trim())
+
+      recognition.onerror = () => { setMicState('idle') }
+      recognition.onend = () => {
+        // If still marked listening, recognition ended unexpectedly — parse what we have
+        setMicState((prev) => {
+          if (prev === 'listening') {
+            setTimeout(() => { parseAndPreview() }, 100)
+            return 'idle'
+          }
+          return prev
+        })
+      }
+
+      setTranscript('')
+      setMicState('listening')
+      recognition.start()
     }
-
-    recognition.onerror = () => { setMicState('idle') }
-    recognition.onend = () => { setMicState('idle') }
-
-    setTranscript('')
-    setMicState('listening')
-    recognition.start()
-  }
-
-  function stopListening() {
-    recognitionRef.current?.stop()
-    setMicState('processing')
-    setTimeout(() => {
-      parseAndPreview()
-      setMicState('idle')
-    }, 400)
   }
 
   function parseAndPreview() {
     const raw = transcript.trim()
     if (!raw) return
 
-    // Normalise — but preserve capitalisation for display
     const normalised = raw
       .replace(/[,:;.!?]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
 
     const words = normalised.split(/\s+/).filter(Boolean)
-
-    // Walk word by word, detect "team <label>" markers
     const sections: Array<{ side: 'A' | 'B'; nameWords: string[] }> = []
     let currentSection: { side: 'A' | 'B'; nameWords: string[] } | null = null
 
@@ -159,11 +158,7 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
       i++
     }
 
-    // Build participant name lookup for grouping hints only —
-    // used to decide if two adjacent words form one name (e.g. "Raj Sharma"),
-    // but NOT used to gate who gets assigned. Everyone gets assigned.
     const knownNames = participants.map((p) => p.player?.name?.toLowerCase() ?? '')
-
     const allEntries: VoiceUnmatched[] = []
 
     for (const section of sections) {
@@ -174,12 +169,9 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
       let j = 0
       while (j < nameWords.length) {
         let nameEntry: string
-        // Try 2-word grouping if combined matches a known participant name
         if (
           j + 1 < nameWords.length &&
-          knownNames.some((n) =>
-            n === `${nameWords[j]} ${nameWords[j + 1]}`.toLowerCase()
-          )
+          knownNames.some((n) => n === `${nameWords[j]} ${nameWords[j + 1]}`.toLowerCase())
         ) {
           nameEntry = `${nameWords[j]} ${nameWords[j + 1]}`
           j += 2
@@ -205,35 +197,21 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
         if (!u.spokenName.trim() || !u.teamId) continue
 
         const spokenNorm = u.spokenName.trim().toLowerCase()
-
-        // Check against existing confirmed participants (case-insensitive)
         const existingParticipation = participants.find(
           (p) => (p.player?.name ?? '').toLowerCase() === spokenNorm
         )
 
         if (existingParticipation) {
-          allAssignments.push({
-            participation: existingParticipation,
-            teamId: u.teamId,
-            teamName: u.teamName,
-          })
+          allAssignments.push({ participation: existingParticipation, teamId: u.teamId, teamName: u.teamName })
           continue
         }
 
-        // Check against players created earlier in this same voice session
-        const sessionMatch = createdThisSession.find(
-          (c) => c.name.toLowerCase() === spokenNorm
-        )
+        const sessionMatch = createdThisSession.find((c) => c.name.toLowerCase() === spokenNorm)
         if (sessionMatch) {
-          allAssignments.push({
-            participation: sessionMatch.participation,
-            teamId: u.teamId,
-            teamName: u.teamName,
-          })
+          allAssignments.push({ participation: sessionMatch.participation, teamId: u.teamId, teamName: u.teamName })
           continue
         }
 
-        // Check global registry by name before creating a new record
         const { data: registryMatches } = await supabase
           .from('players')
           .select('*')
@@ -246,7 +224,6 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
 
         if (registryMatch) {
           playerId = registryMatch.id
-          // Check if already in this match
           const { data: existingParts } = await supabase
             .from('participation')
             .select('*')
@@ -256,15 +233,10 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
 
           const existingPart = existingParts?.[0] ?? null
           if (existingPart) {
-            allAssignments.push({
-              participation: { ...existingPart, player: registryMatch },
-              teamId: u.teamId,
-              teamName: u.teamName,
-            })
+            allAssignments.push({ participation: { ...existingPart, player: registryMatch }, teamId: u.teamId, teamName: u.teamName })
             continue
           }
         } else {
-          // Create new player
           const { data: newPlayer, error: playerError } = await supabase
             .from('players')
             .insert({ name: u.spokenName.trim(), mobile_number: null })
@@ -275,7 +247,6 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
           playerRecord = newPlayer
         }
 
-        // Create participation
         const { data: newParticipation, error: partError } = await supabase
           .from('participation')
           .insert({
@@ -350,14 +321,12 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
           <p className="text-xs text-zinc-500 mb-4">
             Say: <span className="text-zinc-300">"Team A Raj Nitin Vipul Team B Rahul Siraj Amit"</span>
             <br />
-            <span className="text-zinc-600 mt-0.5 block">Tip: speak clearly; new names not in the list will be created automatically.</span>
+            <span className="text-zinc-600 mt-0.5 block">New names not in the list will be added automatically.</span>
           </p>
 
           <div className="flex flex-col items-center gap-4">
             <button
-              onPointerDown={startListening}
-              onPointerUp={stopListening}
-              onPointerLeave={micState === 'listening' ? stopListening : undefined}
+              onClick={toggleListening}
               disabled={micState === 'processing'}
               className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl transition-all shadow-lg ${
                 micState === 'listening'
@@ -367,10 +336,14 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
                     : 'bg-emerald-500 active:scale-95 shadow-emerald-500/20'
               }`}
             >
-              🎙
+              {micState === 'listening' ? '⏹' : '🎙'}
             </button>
             <p className="text-xs text-zinc-500">
-              {micState === 'listening' ? 'Listening… release when done' : micState === 'processing' ? 'Processing…' : 'Hold to speak'}
+              {micState === 'listening'
+                ? 'Listening… tap to stop'
+                : micState === 'processing'
+                  ? 'Processing…'
+                  : 'Tap to start speaking'}
             </p>
           </div>
 
@@ -379,6 +352,15 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
               <p className="text-xs text-zinc-400 mb-1">Live transcript:</p>
               <p className="text-sm text-white">{transcript}</p>
             </div>
+          )}
+
+          {transcript && micState === 'idle' && (
+            <button
+              onClick={() => { parseAndPreview() }}
+              className="w-full mt-3 bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm"
+            >
+              Review & Assign →
+            </button>
           )}
         </>
       )}
@@ -395,9 +377,7 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
 
           {unmatched.length > 0 && (
             <div className="flex flex-col gap-1.5 my-3">
-              <p className="text-xs text-zinc-400 mb-1">
-                Edit names/teams if needed, then confirm:
-              </p>
+              <p className="text-xs text-zinc-400 mb-1">Edit names/teams if needed, then confirm:</p>
               {unmatched.map((u, i) => (
                 <div key={i} className="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2">
                   <input
