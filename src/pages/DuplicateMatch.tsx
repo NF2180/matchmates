@@ -110,10 +110,7 @@ export default function DuplicateMatch() {
     setSubmitting(true)
 
     try {
-      const organizerId = getStoredPlayerId()
-      const adminToken = generateAdminToken()
-
-      // Create the new match
+      const organizerId = getStoredPlayerId() || null
       const { data: newMatch, error: matchError } = await supabase
         .from('matches')
         .insert({

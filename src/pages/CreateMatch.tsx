@@ -57,7 +57,7 @@ export default function CreateMatch() {
         finalGroundId = groundData.id
       }
 
-      const organizerId = getStoredPlayerId()
+      const organizerId = getStoredPlayerId() || null
       const adminToken = generateAdminToken()
 
       const { data: matchData, error: matchError } = await supabase
