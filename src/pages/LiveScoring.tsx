@@ -18,14 +18,12 @@ export default function LiveScoring() {
   const navigate = useNavigate()
   const adminState = useAdminAccess(matchId)
 
-  // Initial striker/non-striker/bowler passed from InningsSetup via router state.
-  // Captured in a ref immediately so it survives re-renders caused by adminState changes.
-  const initStateRef = useRef(location.state as {
+  // Initial striker/non-striker/bowler passed from InningsSetup via router state
+  const initState = location.state as {
     strikerId: string
     nonStrikerId: string
     bowlerId: string
-  } | null)
-  const initState = initStateRef.current
+  } | null
 
   const [innings, setInnings] = useState<InningsRow | null>(null)
   const [deliveries, setDeliveries] = useState<Delivery[]>([])
@@ -380,7 +378,6 @@ export default function LiveScoring() {
     }
   }
 
-  if (adminState === 'checking') return <div className="text-zinc-500 text-sm py-12 text-center">Loading innings…</div>
   if (adminState === 'viewer') {
     return (
       <div className="px-4 py-12 text-center">
