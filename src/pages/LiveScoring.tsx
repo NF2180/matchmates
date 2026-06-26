@@ -538,6 +538,11 @@ export default function LiveScoring() {
         </div>
       </div>
 
+      {/* Debug strip — remove after fixing */}
+      <div className="bg-zinc-800 px-4 py-2 text-xs text-zinc-400 border-b border-zinc-700">
+        S: {strikerId ? strikerId.slice(0,8) : 'EMPTY'} | NS: {nonStrikerId ? nonStrikerId.slice(0,8) : 'EMPTY'} | B: {bowlerId ? bowlerId.slice(0,8) : 'EMPTY'}
+      </div>
+
       {/* Error strip */}
       {error && (
         <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center justify-between">
