@@ -10,7 +10,6 @@ import {
   setPlayerRole,
   setBattingFirstTeam,
 } from '../lib/teams'
-import VoiceTeamAssign, { type VoiceAssignment } from '../components/VoiceTeamAssign'
 import type { Match, Participation, Team, TeamMember, PlayerRole } from '../types'
 
 const ROLE_LABELS: Record<PlayerRole, string> = {
@@ -32,7 +31,6 @@ export default function TeamSetup() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [showVoice, setShowVoice] = useState(false)
   const [editingTeamName, setEditingTeamName] = useState<string | null>(null)
   const [teamNameInput, setTeamNameInput] = useState('')
   const [rolePickerFor, setRolePickerFor] = useState<string | null>(null)
@@ -114,14 +112,6 @@ export default function TeamSetup() {
     if (!id) return
     await setBattingFirstTeam(id, teamId)
     if (id) await loadAll(id)
-  }
-
-  async function handleVoiceAssignments(assignments: VoiceAssignment[]) {
-    if (!id) return
-    for (const a of assignments) {
-      await assignToTeam(id, a.participation.id, a.teamId)
-    }
-    await loadAll(id)
   }
 
   async function handleAddPlayer() {
