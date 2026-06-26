@@ -13,16 +13,14 @@ import type { Player } from '../types'
 type OverEndState = 'idle' | 'needs_bowler' | 'confirmed'
 
 export default function LiveScoring() {
-  const { id: matchId, inningsId } = useParams<{ id: string; inningsId: string }>()
+  const { id: matchId, inningsId, strikerId: urlStrikerId, nonStrikerId: urlNonStrikerId, bowlerId: urlBowlerId } = useParams<{ id: string; inningsId: string; strikerId?: string; nonStrikerId?: string; bowlerId?: string }>()
   const location = useLocation()
   const navigate = useNavigate()
   const adminState = useAdminAccess(matchId)
-  const searchParams = new URLSearchParams(location.search)
 
-  // Player IDs passed via URL params (router state doesn't survive hash navigation on mobile)
-  const initStriker = searchParams.get('striker') ?? ''
-  const initNonStriker = searchParams.get('nonStriker') ?? ''
-  const initBowler = searchParams.get('bowler') ?? ''
+  const initStriker = urlStrikerId ?? ''
+  const initNonStriker = urlNonStrikerId ?? ''
+  const initBowler = urlBowlerId ?? ''
 
   const [innings, setInnings] = useState<InningsRow | null>(null)
   const [deliveries, setDeliveries] = useState<Delivery[]>([])
