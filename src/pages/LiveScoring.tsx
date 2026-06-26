@@ -68,15 +68,17 @@ export default function LiveScoring() {
       const inn = innData as InningsRow
       setInnings(inn)
 
-      // Load teams' players — same query pattern as loadTeamMembers in teams.ts
+      // Load teams' players using same query pattern as loadTeamMembers
       const { data: batMembers } = await supabase
         .from('team_members')
-        .select('participation:participation(*, player:players(*))')
+        .select('*, participation:participation(*, player:players(*))')
+        .eq('match_id', matchId)
         .eq('team_id', inn.batting_team_id)
 
       const { data: bowlMembers } = await supabase
         .from('team_members')
-        .select('participation:participation(*, player:players(*))')
+        .select('*, participation:participation(*, player:players(*))')
+        .eq('match_id', matchId)
         .eq('team_id', inn.bowling_team_id)
 
       const extract = (members: unknown[]): Player[] =>
