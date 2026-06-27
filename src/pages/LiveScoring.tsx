@@ -537,12 +537,6 @@ export default function LiveScoring() {
         </div>
       </div>
 
-      {/* Debug strip — remove after fixing */}
-      <div className="bg-zinc-800 px-4 py-2 text-xs text-zinc-400 border-b border-zinc-700 break-all">
-        <div>S: {strikerId || 'EMPTY'}</div>
-        <div>BAT: {battingPlayers.map(p => p.name).join(', ') || 'EMPTY'}</div>
-      </div>
-
       {/* Error strip */}
       {error && (
         <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 flex items-center justify-between">
