@@ -152,7 +152,9 @@ export default function InningsSetup() {
         target
       )
 
-      sessionStorage.setItem('innings_init', JSON.stringify({ strikerId: striker, nonStrikerId: nonStriker, bowlerId: bowler }))
+      const initPayload = JSON.stringify({ strikerId: striker, nonStrikerId: nonStriker, bowlerId: bowler })
+      sessionStorage.setItem('innings_init', initPayload)
+      localStorage.setItem(`innings_init_${innings.id}`, initPayload)
       navigate(`/match/${match.id}/scoring/${innings.id}`)
     } catch (err) {
       setStartError(err instanceof Error ? err.message : 'Failed to start innings')

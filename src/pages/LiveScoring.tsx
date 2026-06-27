@@ -17,8 +17,13 @@ export default function LiveScoring() {
   const navigate = useNavigate()
   const adminState = useAdminAccess(matchId)
 
-  // Player IDs stored in sessionStorage by InningsSetup before navigating
-  const initData = JSON.parse(sessionStorage.getItem('innings_init') ?? '{}')
+  // Player IDs stored by InningsSetup before navigating.
+  // sessionStorage is the primary source; localStorage is the fallback for tab-close resume.
+  const initData = JSON.parse(
+    sessionStorage.getItem('innings_init') ??
+    localStorage.getItem(`innings_init_${inningsId}`) ??
+    '{}'
+  )
   const initStriker = initData.strikerId ?? ''
   const initNonStriker = initData.nonStrikerId ?? ''
   const initBowler = initData.bowlerId ?? ''
