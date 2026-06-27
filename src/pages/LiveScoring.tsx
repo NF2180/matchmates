@@ -538,8 +538,9 @@ export default function LiveScoring() {
       </div>
 
       {/* Debug strip — remove after fixing */}
-      <div className="bg-zinc-800 px-4 py-2 text-xs text-zinc-400 border-b border-zinc-700">
-        S: {strikerId ? strikerId.slice(0,8) : 'EMPTY'} | NS: {nonStrikerId ? nonStrikerId.slice(0,8) : 'EMPTY'} | B: {bowlerId ? bowlerId.slice(0,8) : 'EMPTY'}
+      <div className="bg-zinc-800 px-4 py-2 text-xs text-zinc-400 border-b border-zinc-700 break-all">
+        <div>S: {strikerId || 'EMPTY'}</div>
+        <div>BAT: {battingPlayers.map(p => p.name).join(', ') || 'EMPTY'}</div>
       </div>
 
       {/* Error strip */}
