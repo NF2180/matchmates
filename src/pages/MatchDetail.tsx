@@ -162,12 +162,22 @@ export default function MatchDetail() {
       ) : null}
 
       {(match.status === 'live' || match.status === 'completed') && (
-        <Link
-          to={`/match/${match.id}/scorecard`}
-          className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-center text-sm mb-3"
-        >
-          📊 View Scorecard
-        </Link>
+        <div className="flex gap-2 mb-3">
+          <Link
+            to={`/match/${match.id}/scorecard`}
+            className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-center text-sm"
+          >
+            📊 Scorecard
+          </Link>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(`🏏 ${match.match_name} — Live Scorecard\n${window.location.origin}${window.location.pathname}#/match/${match.id}/scorecard`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 bg-green-600 text-white font-medium rounded-xl py-3 text-center text-sm"
+          >
+            📤 Share Score
+          </a>
+        </div>
       )}
 {isAdmin && (
         <Link
