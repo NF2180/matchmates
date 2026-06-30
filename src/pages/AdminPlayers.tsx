@@ -5,6 +5,7 @@ import type { Player } from '../types'
 import MergePlayersTool from '../components/MergePlayersTool'
 
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET_1 as string | undefined
+console.log('ADMIN_SECRET set:', !!ADMIN_SECRET, 'length:', ADMIN_SECRET?.length)
 
 export default function AdminPlayers() {
   const [unlocked, setUnlocked] = useState(!ADMIN_SECRET)
