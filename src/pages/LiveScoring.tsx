@@ -460,6 +460,8 @@ export default function LiveScoring() {
             const batterRuns = d.batter_runs ?? 0
             const isWide = d.extra_type === 'wide'
             const isNoBall = d.extra_type === 'no_ball'
+            const isBye = d.extra_type === 'bye'
+            const isLegBye = d.extra_type === 'leg_bye'
             const isBoundary = !isWide && !isNoBall && (d.total_runs === 4 || d.total_runs === 6)
 
             // Build label
@@ -471,6 +473,10 @@ export default function LiveScoring() {
               label = extraRuns > 1 ? `wd+${extraRuns - 1}` : 'wd'
             } else if (isNoBall) {
               label = batterRuns > 0 ? `nb+${batterRuns}` : 'nb'
+            } else if (isBye) {
+              label = extraRuns > 0 ? `B${extraRuns}` : 'B'
+            } else if (isLegBye) {
+              label = extraRuns > 0 ? `LB${extraRuns}` : 'LB'
             } else {
               label = String(d.total_runs)
             }
@@ -482,9 +488,11 @@ export default function LiveScoring() {
                 ? 'bg-zinc-600 text-zinc-200'
                 : isNoBall
                   ? 'bg-amber-500 text-zinc-950'
-                  : isBoundary
-                    ? 'bg-emerald-500 text-zinc-950'
-                    : 'bg-zinc-700 text-zinc-200'
+                  : isBye || isLegBye
+                    ? 'bg-blue-600 text-white'
+                    : isBoundary
+                      ? 'bg-emerald-500 text-zinc-950'
+                      : 'bg-zinc-700 text-zinc-200'
 
             return (
               <div

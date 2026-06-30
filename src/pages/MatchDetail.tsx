@@ -4,10 +4,18 @@ import { supabase } from '../lib/supabase'
 import { buildJoinUrl, buildWhatsAppShareMessage } from '../lib/matchUtils'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import type { Match, Participation } from '../types'
+interface InningsSummary {
+  id: string
+  innings_number: number
+  status: string
+  batting_team: { name: string }[] | null
+}
+
 export default function MatchDetail() {
   const { id } = useParams<{ id: string }>()
   const [match, setMatch] = useState<Match | null>(null)
   const [participants, setParticipants] = useState<Participation[]>([])
+  const [inningsList, setInningsList] = useState<InningsSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -42,6 +50,15 @@ export default function MatchDetail() {
         .order('created_at', { ascending: true })
 
       setParticipants((participationData as Participation[]) ?? [])
+
+      // Fetch innings for status display
+      const { data: inningsData } = await supabase
+        .from('innings')
+        .select('id, innings_number, status, batting_team:teams!batting_team_id(name)')
+        .eq('match_id', matchId)
+        .order('innings_number', { ascending: true })
+      setInningsList((inningsData as InningsSummary[]) ?? [])
+
       setLoading(false)
     }
     if (id) loadMatch(id)
@@ -91,6 +108,23 @@ export default function MatchDetail() {
         </div>
         {match.ground?.name && (
           <div className="text-sm text-zinc-500 mt-0.5">📍 {match.ground.name}</div>
+        )}
+        {/* Smart status */}
+        {match.status === 'completed' && match.result_summary && (
+          <div className="mt-2 text-sm font-semibold text-emerald-400">🏆 {match.result_summary}</div>
+        )}
+        {match.status === 'live' && inningsList.length === 1 && inningsList[0]?.status === 'completed' && (
+          <div className="mt-2 text-sm text-amber-400">1st Innings complete — 2nd Innings setup pending</div>
+        )}
+        {match.status === 'live' && inningsList.length === 2 && inningsList[1]?.status === 'active' && (
+          <div className="mt-2 text-sm text-emerald-400">
+            2nd Innings in progress — {inningsList[1].batting_team?.[0]?.name ?? 'Team'} batting
+          </div>
+        )}
+        {match.status === 'live' && inningsList.length === 1 && inningsList[0]?.status === 'active' && (
+          <div className="mt-2 text-sm text-emerald-400">
+            1st Innings in progress — {inningsList[0].batting_team?.[0]?.name ?? 'Team'} batting
+          </div>
         )}
         <div className="text-xs text-zinc-600 mt-1 font-mono">{match.match_code}</div>
       </header>

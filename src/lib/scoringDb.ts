@@ -192,9 +192,19 @@ async function computeResultSummary(matchId: string): Promise<string> {
     const team1Name = (inn1.batting_team as { name: string }[])?.[0]?.name ?? 'Team 1'
     const team2Name = (inn2.batting_team as { name: string }[])?.[0]?.name ?? 'Team 2'
 
+    // Count legal balls bowled in innings 2
+    const { data: inn2Deliveries } = await supabase
+      .from('deliveries')
+      .select('is_legal')
+      .eq('innings_id', inn2.id)
+    const legalBowled = (inn2Deliveries ?? []).filter((d) => d.is_legal).length
+    const totalBalls = (inn2.overs_limit ?? 0) * 6
+    const ballsToSpare = Math.max(0, totalBalls - legalBowled)
+
     if (t2.runs > t1.runs) {
-      const wicketsLeft = Math.max(0, (inn2.overs_limit > 0 ? 11 : 11) - 1 - t2.wickets)
-      return `${team2Name} won by ${wicketsLeft} wicket${wicketsLeft !== 1 ? 's' : ''}`
+      const wicketsLeft = Math.max(0, 10 - t2.wickets)
+      const spareStr = ballsToSpare > 0 ? ` & ${ballsToSpare} ball${ballsToSpare !== 1 ? 's' : ''} to spare` : ''
+      return `${team2Name} won by ${wicketsLeft} wicket${wicketsLeft !== 1 ? 's' : ''}${spareStr}`
     } else if (t1.runs > t2.runs) {
       const margin = t1.runs - t2.runs
       return `${team1Name} won by ${margin} run${margin !== 1 ? 's' : ''}`
