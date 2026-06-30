@@ -73,6 +73,12 @@ export default function LiveScoring() {
       const inn = innData as InningsRow
       setInnings(inn)
 
+      // If innings already completed, redirect to scorecard instead of showing scoring UI
+      if (inn.status === 'completed') {
+        navigate(`/match/${matchId}/scorecard`)
+        return
+      }
+
       // Load teams' players using same query pattern as loadTeamMembers
       const { data: batMembers } = await supabase
         .from('team_members')
@@ -502,24 +508,34 @@ export default function LiveScoring() {
         <div className="flex gap-2 text-sm">
           <div className="flex-1">
             <div className="text-zinc-500 text-xs mb-1">Batting</div>
-            {striker && (
-              <div className="flex items-center justify-between">
-                <span className="text-white font-medium">{striker.name.split(' ')[0]} *</span>
-                <span className="text-zinc-400 text-xs">
-                  {cs.batters.find((b: BatterStats) => b.player_id === strikerId)?.runs ?? 0}
-                  ({cs.batters.find((b: BatterStats) => b.player_id === strikerId)?.balls ?? 0})
-                </span>
-              </div>
-            )}
-            {nonStriker && (
-              <div className="flex items-center justify-between mt-0.5">
-                <span className="text-zinc-400">{nonStriker.name.split(' ')[0]}</span>
-                <span className="text-zinc-500 text-xs">
-                  {cs.batters.find((b: BatterStats) => b.player_id === nonStrikerId)?.runs ?? 0}
-                  ({cs.batters.find((b: BatterStats) => b.player_id === nonStrikerId)?.balls ?? 0})
-                </span>
-              </div>
-            )}
+            {striker && (() => {
+              const strikerStats = cs.batters.find((b: BatterStats) => b.player_id === strikerId)
+              const isOut = strikerStats?.is_out ?? false
+              return (
+                <div className="flex items-center justify-between">
+                  <span className={isOut ? "text-red-400" : "text-white font-medium"}>
+                    {striker.name.split(' ')[0]} {isOut ? '†' : '*'}
+                  </span>
+                  <span className="text-zinc-400 text-xs">
+                    {strikerStats?.runs ?? 0}({strikerStats?.balls ?? 0})
+                  </span>
+                </div>
+              )
+            })()}
+            {nonStriker && (() => {
+              const nonStrikerStats = cs.batters.find((b: BatterStats) => b.player_id === nonStrikerId)
+              const isOut = nonStrikerStats?.is_out ?? false
+              return (
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className={isOut ? "text-red-400" : "text-zinc-400"}>
+                    {nonStriker.name.split(' ')[0]} {isOut ? '†' : ''}
+                  </span>
+                  <span className="text-zinc-500 text-xs">
+                    {nonStrikerStats?.runs ?? 0}({nonStrikerStats?.balls ?? 0})
+                  </span>
+                </div>
+              )
+            })()}
           </div>
           <div className="w-px bg-zinc-800" />
           <div className="flex-1 pl-2">
