@@ -188,14 +188,14 @@ function MatchCard({ match, gameNumber }: { match: MatchWithInnings; gameNumber:
 }
 
 function getResultText(match: MatchWithInnings): string | null {
-  if (match.result_summary) return match.result_summary
-  if (!match.innings || match.innings.length < 2) return null
-
-  const inn1 = match.innings[0]
-  const inn2 = match.innings[1]
-  if (inn1.status !== 'completed' || inn2.status !== 'completed') return null
-
-  // We don't have delivery tallies here — use result_summary if available, otherwise just show status
+  if (match.result_summary) return `🏆 ${match.result_summary}`
+  if (match.status === 'live' && match.innings && match.innings.length > 0) {
+    const activeInn = match.innings.find((i) => i.status === 'active')
+    if (activeInn) {
+      const teamName = match.teamNames?.[activeInn.batting_team_id] ?? 'Team'
+      return `${teamName} batting`
+    }
+  }
   return null
 }
 
