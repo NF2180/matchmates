@@ -111,7 +111,8 @@ export default function TeamSetup() {
   async function handleBattingFirst(teamId: string) {
     if (!id) return
     await setBattingFirstTeam(id, teamId)
-    if (id) await loadAll(id)
+    // Auto-navigate to innings setup now that toss is done
+    navigate(`/match/${id}/innings/1`)
   }
 
   async function handleAddPlayer() {

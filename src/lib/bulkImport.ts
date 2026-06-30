@@ -24,8 +24,10 @@ export function parsePastedNames(text: string): ParsedName[] {
     .filter((line) => line.length > 0)
     .map((raw) => {
       const cleaned = raw
-        .replace(/^\d+[.)]\s*/, '') // "1. " or "1) "
-        .replace(/^[-•*]\s*/, '') // "- " or "• " or "* "
+        .replace(/^\d+\s*[.)]\s*/, '') // "1. " or "1) " or "1." or "1)"
+        .replace(/^\d+\s+/, '')         // "1 Nitin" (number then space)
+        .replace(/^[-•*]\s*/, '')       // "- " or "• " or "* "
+        .replace(/[\u200b-\u200d\ufeff]/g, '') // strip zero-width chars
         .trim()
       return { raw, cleaned }
     })
