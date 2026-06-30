@@ -6,8 +6,9 @@ interface Props {
   striker: Player
   nonStriker: Player
   fieldingPlayers: Player[]
-  allowedTypes?: WicketType[] // if provided, only these dismissal types are selectable
-  runsLabel?: string // context-specific label for the runs-before-wicket picker
+  allowedTypes?: WicketType[]
+  runsLabel?: string
+  wicketKeeperId?: string | null
   onConfirm: (result: WicketResult) => void
   onCancel: () => void
 }
@@ -29,10 +30,18 @@ const WICKET_TYPES: Array<{ type: WicketType; label: string; needsFielder: boole
   { type: 'retired_hurt', label: 'Retired Hurt',  needsFielder: false, canDismissNonStriker: false },
 ]
 
-export default function WicketModal({ striker, nonStriker, fieldingPlayers, allowedTypes, runsLabel, onConfirm, onCancel }: Props) {
+export default function WicketModal({ striker, nonStriker, fieldingPlayers, allowedTypes, runsLabel, wicketKeeperId, onConfirm, onCancel }: Props) {
   const [wicketType, setWicketType] = useState<WicketType | null>(null)
   const [dismissedId, setDismissedId] = useState<string>(striker.id)
   const [fielderId, setFielderId] = useState<string>('')
+
+  function handleWicketTypeChange(type: WicketType) {
+    setWicketType(type)
+    // Auto-select wicketkeeper for stumping and caught-behind scenarios
+    if (type === 'stumped' && wicketKeeperId) {
+      setFielderId(wicketKeeperId)
+    }
+  }
   const [batterRuns, setBatterRuns] = useState(0)
 
   const visibleTypes = allowedTypes
@@ -89,7 +98,7 @@ export default function WicketModal({ striker, nonStriker, fieldingPlayers, allo
             <button
               key={w.type}
               onClick={() => {
-                setWicketType(w.type)
+                handleWicketTypeChange(w.type)
                 setDismissedId(striker.id) // reset to striker on type change
               }}
               className={`py-2.5 rounded-lg text-sm font-medium border ${

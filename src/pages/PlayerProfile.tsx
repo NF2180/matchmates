@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Player } from '../types'
 import type { CareerStats } from '../lib/careerStats'
 
 export default function PlayerProfile() {
   const { playerId } = useParams<{ playerId: string }>()
+  const navigate = useNavigate()
   const [player, setPlayer] = useState<Player | null>(null)
   const [stats, setStats] = useState<CareerStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -59,7 +60,7 @@ export default function PlayerProfile() {
   return (
     <div className="flex flex-col flex-1 px-4 pb-10">
       <header className="pt-6 pb-4">
-        <Link to="/" className="text-sm text-zinc-500 mb-3 inline-block">← Back</Link>
+        <button onClick={() => navigate(-1)} className="text-sm text-zinc-500 mb-3 inline-block">← Back</button>
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-xl font-bold text-emerald-400">
             {initials}

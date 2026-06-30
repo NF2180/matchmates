@@ -33,6 +33,7 @@ export default function LiveScoring() {
   const [state, setState] = useState<InningsState | null>(null)
   const [battingPlayers, setBattingPlayers] = useState<Player[]>([])
   const [bowlingPlayers, setBowlingPlayers] = useState<Player[]>([])
+  const [wicketKeeperId, setWicketKeeperId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -96,6 +97,13 @@ export default function LiveScoring() {
         (members as Array<{ participation: { player: Player } }>)
           .map((m) => m.participation?.player)
           .filter((p): p is Player => !!p && !!p.id)
+
+      // Find wicketkeeper in bowling team for auto-select on stumping
+      const wkMember = (bowlMembers ?? []).find(
+        (m: { role?: string | null }) => m.role === 'wicket_keeper'
+      ) as { participation?: { player?: Player } } | undefined
+      const wkId = wkMember?.participation?.player?.id ?? null
+      if (wkId) setWicketKeeperId(wkId)
 
       setBattingPlayers(extract(batMembers ?? []))
       setBowlingPlayers(extract(bowlMembers ?? []))
@@ -711,6 +719,7 @@ export default function LiveScoring() {
           striker={striker}
           nonStriker={nonStriker}
           fieldingPlayers={bowlingPlayers}
+          wicketKeeperId={wicketKeeperId}
           allowedTypes={
             cs.next_ball_is_free_hit
               ? ['run_out']
@@ -805,6 +814,7 @@ export default function LiveScoring() {
           striker={striker}
           nonStriker={nonStriker}
           fieldingPlayers={bowlingPlayers}
+          wicketKeeperId={wicketKeeperId}
           allowedTypes={cs.next_ball_is_free_hit ? ['run_out'] : undefined}
           onConfirm={handleWicketResult}
           onCancel={() => setShowWicket(false)}
