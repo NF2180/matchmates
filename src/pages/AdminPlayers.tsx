@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import type { Player } from '../types'
 import MergePlayersTool from '../components/MergePlayersTool'
 
-const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET as string | undefined
+const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET_1 as string | undefined
 
 export default function AdminPlayers() {
   const [unlocked, setUnlocked] = useState(!ADMIN_SECRET)
