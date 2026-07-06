@@ -201,14 +201,14 @@ function MatchCard({ match, gameNumber, onDelete }: { match: MatchWithInnings; g
       {!confirming ? (
         <button
           onClick={() => setConfirming(true)}
-          className="bg-red-500 rounded-xl px-4 text-white font-bold text-base min-w-[44px]"
+          style={{ background: '#ef4444', borderRadius: '12px', padding: '0 16px', color: 'white', fontWeight: 'bold', fontSize: '16px', minWidth: '44px' }}
         >
           ✕
         </button>
       ) : (
         <button
           onClick={() => onDelete(match.id)}
-          className="bg-red-600 rounded-xl px-3 text-white text-xs font-semibold min-w-[44px]"
+          style={{ background: '#dc2626', borderRadius: '12px', padding: '0 12px', color: 'white', fontSize: '12px', fontWeight: '600', minWidth: '44px' }}
         >
           Del?
         </button>
