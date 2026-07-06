@@ -271,7 +271,43 @@ export default function LiveScoring() {
     setSaving(true)
     try {
       await deleteLastDelivery(innings.id)
-      await loadAll()
+      // Reload deliveries without touching player state
+      const { data: raw } = await supabase
+        .from('deliveries')
+        .select('*')
+        .eq('innings_id', innings.id)
+        .order('created_at', { ascending: true })
+
+      const mapped: Delivery[] = (raw ?? []).map((d) => ({
+        id: d.id,
+        striker_id: d.striker_id,
+        non_striker_id: d.non_striker_id,
+        bowler_id: d.bowler_id,
+        batter_runs: d.batter_runs,
+        extra_runs: d.extra_runs,
+        total_runs: d.total_runs,
+        extra_type: d.extra_type,
+        is_free_hit: d.is_free_hit,
+        is_wicket: d.is_wicket,
+        wicket_type: d.wicket_type,
+        dismissed_player_id: d.dismissed_player_id,
+        fielder_id: d.fielder_id,
+        is_legal: d.is_legal,
+      }))
+
+      setDeliveries(mapped)
+      const computed = computeInningsState(mapped, battingPlayers.length, innings.overs_limit, innings.target)
+      setState(computed)
+      setOverEndState('idle')
+      setShowNextBatter(false)
+
+      // Restore players from last delivery — never prompt again
+      if (mapped.length > 0) {
+        const last = mapped[mapped.length - 1]
+        setStrikerId(last.striker_id)
+        setNonStrikerId(last.non_striker_id)
+        setBowlerId(last.bowler_id)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Undo failed')
     } finally {
