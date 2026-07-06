@@ -156,10 +156,10 @@ function MatchCard({ match, gameNumber, onDelete }: { match: MatchWithInnings; g
   const [confirming, setConfirming] = useState(false)
 
   return (
-    <div className="relative">
+    <div className="relative flex items-stretch gap-2">
       <Link
         to={`/match/${match.id}`}
-        className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 active:bg-zinc-800 transition-colors block"
+        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl p-4 active:bg-zinc-800 transition-colors block"
       >
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2 min-w-0">
@@ -170,24 +170,7 @@ function MatchCard({ match, gameNumber, onDelete }: { match: MatchWithInnings; g
             )}
             <span className="font-semibold text-white truncate">{match.match_name}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <StatusBadge status={match.status} />
-            {!confirming ? (
-              <button
-                onClick={(e) => { e.preventDefault(); setConfirming(true) }}
-                className="text-zinc-600 text-xs px-1.5 py-0.5 rounded hover:text-red-400 active:text-red-400"
-              >
-                ✕
-              </button>
-            ) : (
-              <button
-                onClick={(e) => { e.preventDefault(); onDelete(match.id) }}
-                className="text-red-400 text-xs px-2 py-0.5 bg-red-500/10 border border-red-500/30 rounded font-semibold"
-              >
-                Delete?
-              </button>
-            )}
-          </div>
+          <StatusBadge status={match.status} />
         </div>
 
       {match.match_time && (
@@ -215,6 +198,21 @@ function MatchCard({ match, gameNumber, onDelete }: { match: MatchWithInnings; g
         </div>
       )}
       </Link>
+      {!confirming ? (
+        <button
+          onClick={() => setConfirming(true)}
+          className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 text-zinc-600 active:text-red-400"
+        >
+          ✕
+        </button>
+      ) : (
+        <button
+          onClick={() => onDelete(match.id)}
+          className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 text-red-400 text-xs font-semibold"
+        >
+          Del?
+        </button>
+      )}
     </div>
   )
 }
