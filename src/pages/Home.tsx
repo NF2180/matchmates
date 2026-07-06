@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Match } from '../types'
 
@@ -25,6 +24,18 @@ export default function Home() {
   const [groups, setGroups] = useState<DateGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  async function deleteMatch(matchId: string) {
+    await supabase.from('deliveries').delete().eq('innings_id',
+      (await supabase.from('innings').select('id').eq('match_id', matchId)).data?.map((i: {id: string}) => i.id) ?? []
+    )
+    await supabase.from('innings').delete().eq('match_id', matchId)
+    await supabase.from('team_members').delete().eq('match_id', matchId)
+    await supabase.from('teams').delete().eq('match_id', matchId)
+    await supabase.from('participation').delete().eq('match_id', matchId)
+    await supabase.from('matches').delete().eq('id', matchId)
+    setGroups((prev) => prev.map((g) => ({ ...g, matches: g.matches.filter((m) => m.id !== matchId) })).filter((g) => g.matches.length > 0))
+  }
 
   useEffect(() => {
     async function loadMatches() {
@@ -125,6 +136,7 @@ export default function Home() {
                   key={match.id}
                   match={match}
                   gameNumber={group.matches.length > 1 ? i + 1 : null}
+                  onDelete={deleteMatch}
                 />
               ))}
             </div>
@@ -139,25 +151,44 @@ export default function Home() {
   )
 }
 
-function MatchCard({ match, gameNumber }: { match: MatchWithInnings; gameNumber: number | null }) {
+function MatchCard({ match, gameNumber, onDelete }: { match: MatchWithInnings; gameNumber: number | null; onDelete: (id: string) => void }) {
   const result = getResultText(match)
+  const [confirming, setConfirming] = useState(false)
 
   return (
-    <Link
-      to={`/match/${match.id}`}
-      className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 active:bg-zinc-800 transition-colors"
-    >
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2 min-w-0">
-          {gameNumber && (
-            <span className="text-xs text-emerald-400 font-semibold shrink-0">
-              Game {gameNumber}
-            </span>
-          )}
-          <span className="font-semibold text-white truncate">{match.match_name}</span>
+    <div className="relative">
+      <Link
+        to={`/match/${match.id}`}
+        className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 active:bg-zinc-800 transition-colors block"
+      >
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2 min-w-0">
+            {gameNumber && (
+              <span className="text-xs text-emerald-400 font-semibold shrink-0">
+                Game {gameNumber}
+              </span>
+            )}
+            <span className="font-semibold text-white truncate">{match.match_name}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <StatusBadge status={match.status} />
+            {!confirming ? (
+              <button
+                onClick={(e) => { e.preventDefault(); setConfirming(true) }}
+                className="text-zinc-600 text-xs px-1.5 py-0.5 rounded hover:text-red-400 active:text-red-400"
+              >
+                ✕
+              </button>
+            ) : (
+              <button
+                onClick={(e) => { e.preventDefault(); onDelete(match.id) }}
+                className="text-red-400 text-xs px-2 py-0.5 bg-red-500/10 border border-red-500/30 rounded font-semibold"
+              >
+                Delete?
+              </button>
+            )}
+          </div>
         </div>
-        <StatusBadge status={match.status} />
-      </div>
 
       {match.match_time && (
         <div className="text-xs text-zinc-500 mt-0.5">{formatTime(match.match_time)}</div>
@@ -183,7 +214,8 @@ function MatchCard({ match, gameNumber }: { match: MatchWithInnings; gameNumber:
           })}
         </div>
       )}
-    </Link>
+      </Link>
+    </div>
   )
 }
 
