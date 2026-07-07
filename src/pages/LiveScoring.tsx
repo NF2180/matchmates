@@ -295,6 +295,7 @@ export default function LiveScoring() {
         dismissed_player_id: d.dismissed_player_id as string | null,
         fielder_id: d.fielder_id as string | null,
         is_legal: d.is_legal as boolean,
+        over_number: d.over_number as number,
       })) as Delivery[]
 
       setDeliveries(mapped)
