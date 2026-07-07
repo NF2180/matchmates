@@ -280,14 +280,22 @@ export default function LiveScoring() {
         .eq('innings_id', innings.id)
         .order('created_at', { ascending: true })
 
-      const mapped: Delivery[] = (raw ?? []).map((d) => ({
-        id: d.id,
-        striker_id: d.striker_id,
-        non_striker_id: d.non_striker_id,
-        bowler_id: d.bowler_id,
-        batter_runs: d.batter_runs,
-        extra_runs: d.extra_runs,
-        total_runs: d.total_runs,
+      const mapped = (raw ?? []).map((d) => ({
+        id: d.id as string,
+        striker_id: d.striker_id as string,
+        non_striker_id: d.non_striker_id as string,
+        bowler_id: d.bowler_id as string,
+        batter_runs: d.batter_runs as number,
+        extra_runs: d.extra_runs as number,
+        total_runs: d.total_runs as number,
+        extra_type: d.extra_type as string | null,
+        is_free_hit: d.is_free_hit as boolean,
+        is_wicket: d.is_wicket as boolean,
+        wicket_type: d.wicket_type as string | null,
+        dismissed_player_id: d.dismissed_player_id as string | null,
+        fielder_id: d.fielder_id as string | null,
+        is_legal: d.is_legal as boolean,
+      })) as Delivery[]
         extra_type: d.extra_type,
         is_free_hit: d.is_free_hit,
         is_wicket: d.is_wicket,

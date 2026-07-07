@@ -94,7 +94,7 @@ export default function DuplicateMatch() {
           .from('team_members')
           .select('role, participation:participation(player_id, player:players(id, name))')
           .eq('team_id', teamId)
-        return ((members ?? []) as Array<{ role: string | null; participation: { player_id: string; player: Player | Player[] } }>)
+        return ((members ?? []) as unknown as Array<{ role: string | null; participation: { player_id: string; player: Player | Player[] } }>)
           .map((m, i) => {
             const pl = Array.isArray(m.participation.player) ? m.participation.player[0] : m.participation.player
             return {
