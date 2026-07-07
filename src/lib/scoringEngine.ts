@@ -327,15 +327,9 @@ export interface DeliveryInput {
   fielderId: string | null
 }
 
-export function buildDelivery(input: DeliveryInput): Omit<Delivery, 'id'> & {
-  innings_id: string
-  match_id: string
-  innings_number: number
-} {
+export function buildDelivery(input: DeliveryInput): Omit<Delivery, 'id'> & { innings_id: string } {
   return {
     innings_id: input.inningsId,
-    match_id: input.matchId,
-    innings_number: input.inningsNumber,
     over_number: input.overNumber,
     ball_number: input.ballNumber,
     is_legal: input.isLegal,
