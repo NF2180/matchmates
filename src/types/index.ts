@@ -88,3 +88,24 @@ export interface Innings {
 
 export type ExtraType = 'wide' | 'no_ball' | 'bye' | 'leg_bye' | 'overthrow'
 export type WicketType = 'bowled' | 'caught' | 'lbw' | 'run_out' | 'stumped' | 'hit_wicket' | 'retired_hurt'
+
+export interface DeliveryRecord {
+  id: string
+  innings_id: string
+  over_number: number
+  ball_number: number
+  is_legal: boolean
+  striker_id: string
+  non_striker_id: string
+  bowler_id: string
+  batter_runs: number
+  extra_runs: number
+  total_runs: number
+  extra_type: ExtraType | null
+  is_free_hit: boolean
+  is_wicket: boolean
+  wicket_type: WicketType | null
+  dismissed_player_id: string | null
+  fielder_id: string | null
+  created_at: string
+}

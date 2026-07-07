@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { generateMatchCode, generateJoinToken, generateAdminToken } from '../lib/matchUtils'
+import { generateCode, generateJoinToken, generateAdminToken } from '../lib/matchUtils'
 import { getStoredPlayerId, setStoredAdminToken } from '../lib/identity'
 import type { Ground } from '../types'
 
@@ -63,7 +63,7 @@ export default function CreateMatch() {
       const { data: matchData, error: matchError } = await supabase
         .from('matches')
         .insert({
-          match_code: generateMatchCode(),
+          match_code: generateCode(),
           join_token: generateJoinToken(),
           admin_token: adminToken,
           match_name: matchName.trim(),

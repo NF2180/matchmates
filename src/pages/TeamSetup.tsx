@@ -23,7 +23,6 @@ export default function TeamSetup() {
   const [teamB, setTeamB] = useState<Team | null>(null)
   const [members, setMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   const [editingTeamName, setEditingTeamName] = useState<string | null>(null)
   const [teamNameInput, setTeamNameInput] = useState('')
@@ -152,10 +151,10 @@ export default function TeamSetup() {
             {inTeam && (
               <button onClick={() => setRolePickerFor(isPickingRole ? null : p.id)} className="text-xs text-zinc-500 px-2 py-1 bg-zinc-700 rounded">Role</button>
             )}
-            {inTeam?.id === teamA.id && <button onClick={() => handleAssign(p.id, teamB.id)} className="text-xs text-zinc-500 px-2 py-1 bg-zinc-700 rounded">→ {teamB.name}</button>}
-            {inTeam?.id === teamB.id && <button onClick={() => handleAssign(p.id, teamA.id)} className="text-xs text-zinc-500 px-2 py-1 bg-zinc-700 rounded">→ {teamA.name}</button>}
-            {!inTeam && <button onClick={() => handleAssign(p.id, teamA.id)} className="text-xs text-zinc-500 px-2 py-1 bg-zinc-700 rounded">→ {teamA.name}</button>}
-            {!inTeam && <button onClick={() => handleAssign(p.id, teamB.id)} className="text-xs text-zinc-500 px-2 py-1 bg-zinc-700 rounded">→ {teamB.name}</button>}
+            {inTeam?.id === teamA?.id && <button onClick={() => handleAssign(p.id, teamB!.id)} className="text-xs text-zinc-500 px-2 py-1 bg-zinc-700 rounded">→ {teamB?.name}</button>}
+            {inTeam?.id === teamB?.id && <button onClick={() => handleAssign(p.id, teamA!.id)} className="text-xs text-zinc-500 px-2 py-1 bg-zinc-700 rounded">→ {teamA?.name}</button>}
+            {!inTeam && <button onClick={() => handleAssign(p.id, teamA!.id)} className="text-xs text-zinc-500 px-2 py-1 bg-zinc-700 rounded">→ {teamA?.name}</button>}
+            {!inTeam && <button onClick={() => handleAssign(p.id, teamB!.id)} className="text-xs text-zinc-500 px-2 py-1 bg-zinc-700 rounded">→ {teamB?.name}</button>}
             {inTeam && <button onClick={() => handleAssign(p.id, null)} className="text-xs text-zinc-600 px-1">✕</button>}
           </div>
         </div>
