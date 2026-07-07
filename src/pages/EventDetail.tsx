@@ -78,7 +78,6 @@ export default function EventDetail() {
     navigate(`/match/${match.id}/teams`)
     setCreatingGame(false)
   }
-  }
 
   function copyJoinLink() {
     if (!event) return
