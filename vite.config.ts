@@ -41,6 +41,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         navigateFallback: '/matchmates/index.html',
         navigateFallbackDenylist: [/^\/api/],
+        cacheId: 'matchmates-v3',
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
