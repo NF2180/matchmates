@@ -93,7 +93,7 @@ export async function loadDeliveries(inningsId: string) {
 export async function saveDelivery(input: DeliveryInput) {
   const row = buildDelivery(input)
   const { data, error } = await supabase.from('deliveries').insert(row).select().single()
-  if (error) throw new Error(`${error.message}: ${JSON.stringify(row)}`)
+  if (error) throw error
   return data
 }
 
