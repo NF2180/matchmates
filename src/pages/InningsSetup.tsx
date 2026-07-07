@@ -9,7 +9,8 @@ export default function InningsSetup() {
   const { id, inningsNum } = useParams<{ id: string; inningsNum: string }>()
   const navigate = useNavigate()
   const inningsNumber = parseInt(inningsNum ?? '1', 10)
-  const adminState = useAdminAccess(id)
+  const [eventId, setEventId] = useState<string | undefined>()
+  const adminState = useAdminAccess(eventId)
 
   const [match, setMatch] = useState<Match | null>(null)
   const [battingTeam, setBattingTeam] = useState<Team | null>(null)
@@ -43,6 +44,7 @@ export default function InningsSetup() {
     }
     const m = matchData as Match
     setMatch(m)
+    setEventId(m.event_id)
 
     // For innings 2, default overs to whatever innings 1 was actually played at,
     // not the match's stored overs value (which may differ if organiser changed it).

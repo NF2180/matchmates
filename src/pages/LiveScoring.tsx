@@ -15,7 +15,8 @@ type OverEndState = 'idle' | 'needs_bowler' | 'confirmed'
 export default function LiveScoring() {
   const { id: matchId, inningsId } = useParams<{ id: string; inningsId: string }>()
   const navigate = useNavigate()
-  const adminState = useAdminAccess(matchId)
+  const [eventId, setEventId] = useState<string | undefined>()
+  const adminState = useAdminAccess(eventId)
 
   // Player IDs stored by InningsSetup before navigating.
   // sessionStorage is the primary source; localStorage is the fallback for tab-close resume.
@@ -34,6 +35,7 @@ export default function LiveScoring() {
   const [battingPlayers, setBattingPlayers] = useState<Player[]>([])
   const [bowlingPlayers, setBowlingPlayers] = useState<Player[]>([])
   const [wicketKeeperId, setWicketKeeperId] = useState<string | null>(null)
+  const [eventId, setEventId] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -74,7 +76,11 @@ export default function LiveScoring() {
       const inn = innData as InningsRow
       setInnings(inn)
 
-      // If innings already completed, redirect to scorecard instead of showing scoring UI
+      // Get event_id for admin check
+      const { data: matchData } = await supabase.from('matches').select('event_id').eq('id', matchId).single()
+      if (matchData) setEventId(matchData.event_id)
+
+      // If innings already completed, redirect to scorecard
       if (inn.status === 'completed') {
         navigate(`/match/${matchId}/scorecard`)
         return

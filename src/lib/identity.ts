@@ -8,22 +8,14 @@ export function setStoredPlayerId(id: string) {
   localStorage.setItem(PLAYER_ID_KEY, id)
 }
 
-export function clearStoredPlayerId() {
-  localStorage.removeItem(PLAYER_ID_KEY)
+function adminTokenKey(eventId: string): string {
+  return `matchmates_admin_${eventId}`
 }
 
-function adminTokenKey(matchId: string): string {
-  return `matchmates_admin_${matchId}`
+export function getStoredAdminToken(eventId: string): string | null {
+  return localStorage.getItem(adminTokenKey(eventId))
 }
 
-export function getStoredAdminToken(matchId: string): string | null {
-  return localStorage.getItem(adminTokenKey(matchId))
-}
-
-export function setStoredAdminToken(matchId: string, token: string) {
-  localStorage.setItem(adminTokenKey(matchId), token)
-}
-
-export function clearStoredAdminToken(matchId: string) {
-  localStorage.removeItem(adminTokenKey(matchId))
+export function setStoredAdminToken(eventId: string, token: string) {
+  localStorage.setItem(adminTokenKey(eventId), token)
 }

@@ -1,116 +1,60 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { fuzzyMatchName } from '../lib/fuzzyMatch'
-import type { Match, Participation, Player } from '../types'
-
-type BulkRowStatus = 'new' | 'registry_match' | 'already_in_match'
-interface BulkRow {
-  inputName: string
-  status: BulkRowStatus
-  registryPlayer?: Player
-  useExisting: boolean // true = merge with registry_match, false = create new
-}
+import { cleanPlayerName } from '../lib/matchUtils'
+import type { Participation, Player } from '../types'
 
 export default function AttendanceDashboard() {
-  const { id } = useParams<{ id: string }>()
-  const [match, setMatch] = useState<Match | null>(null)
+  const { id } = useParams<{ id: string }>() // event id
   const [participants, setParticipants] = useState<Participation[]>([])
   const [loading, setLoading] = useState(true)
+  const [playerSearch, setPlayerSearch] = useState('')
+  const [searchResults, setSearchResults] = useState<Player[]>([])
+  const [bulkText, setBulkText] = useState('')
+  const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [showAddGuest, setShowAddGuest] = useState(false)
-  const [guestName, setGuestName] = useState('')
-  const [adding, setAdding] = useState(false)
+  useEffect(() => { if (id) loadParticipants() }, [id])
 
-  const [bulkStep, setBulkStep] = useState<'hidden' | 'paste' | 'review' | 'done'>('hidden')
-  const [bulkText, setBulkText] = useState('')
-  const [bulkRows, setBulkRows] = useState<BulkRow[]>([])
-  const [bulkChecking, setBulkChecking] = useState(false)
-  const [bulkApplying, setBulkApplying] = useState(false)
-  const [bulkSummary, setBulkSummary] = useState<string | null>(null)
-
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
-
-  const loadData = useCallback(async (matchId: string) => {
-    setLoading(true)
-    setError(null)
-
-    const { data: matchData, error: matchError } = await supabase
-      .from('matches')
-      .select('*')
-      .eq('id', matchId)
-      .single()
-
-    if (matchError) {
-      setError(matchError.message)
-      setLoading(false)
-      return
-    }
-    setMatch(matchData as Match)
-
-    const { data: participationData } = await supabase
-      .from('participation')
-      .select('*, player:players(*)')
-      .eq('match_id', matchId)
-      .order('created_at', { ascending: true })
-
-    setParticipants((participationData as Participation[]) ?? [])
+  async function loadParticipants() {
+    const { data } = await supabase.from('participation').select('*, player:players(*)').eq('event_id', id).order('created_at')
+    setParticipants((data as Participation[]) ?? [])
     setLoading(false)
-  }, [])
+  }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional data fetch on mount/id change
-    if (id) loadData(id)
-  }, [id, loadData])
+    if (!playerSearch.trim()) { setSearchResults([]); return }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('players').select('id, name').ilike('name', `%${playerSearch.trim()}%`).limit(8)
+      setSearchResults((data as Player[]) ?? [])
+    }, 300)
+    return () => clearTimeout(t)
+  }, [playerSearch])
 
-  async function addGuest(e: React.FormEvent) {
-    e.preventDefault()
-    if (!guestName.trim() || !match) return
+  async function addPlayer(name: string, existingId?: string) {
+    if (!id || !name.trim()) return
     setAdding(true)
     try {
-      // Check registry first for duplicates
-      const { data: allPlayers } = await supabase.from('players').select('*')
-      const candidates = ((allPlayers as Player[]) ?? []).map((p) => ({ id: p.id, name: p.name }))
-      const registryResult = fuzzyMatchName(guestName.trim(), candidates)
-
-      let playerId: string
-      if (registryResult) {
-        playerId = registryResult.candidate.id
-      } else {
-        const syntheticMobile = `guest_${Date.now()}`
-        const { data: newPlayer, error: playerError } = await supabase
-          .from('players')
-          .insert({ name: guestName.trim(), mobile_number: syntheticMobile })
-          .select()
-          .single()
-        if (playerError) throw playerError
-        playerId = newPlayer.id
+      let playerId = existingId
+      if (!playerId) {
+        const { data: existing } = await supabase.from('players').select('id').ilike('name', name.trim()).limit(1)
+        if (existing && existing.length > 0) {
+          playerId = existing[0].id
+        } else {
+          const { data: newP } = await supabase.from('players').insert({ name: name.trim(), mobile_number: null }).select().single()
+          playerId = newP?.id
+        }
       }
-
-      // Check if already in this match
-      const { data: existingParts } = await supabase
-        .from('participation')
-        .select('id')
-        .eq('match_id', match.id)
-        .eq('player_id', playerId)
-        .limit(1)
-
-      if (!existingParts?.[0]) {
-        await supabase.from('participation').insert({
-          match_id: match.id,
-          player_id: playerId,
-          status: 'playing',
-          is_guest: !registryResult,
-          added_by_organizer: true,
-          responded_at: new Date().toISOString(),
-        })
-      }
-
-      setGuestName('')
-      setShowAddGuest(false)
-      if (id) loadData(id)
+      if (!playerId) return
+      const already = participants.find((p) => p.player_id === playerId)
+      if (already) { setError(`${name} is already in this event`); return }
+      await supabase.from('participation').insert({
+        event_id: id, player_id: playerId, status: 'playing',
+        is_guest: false, added_by_organizer: true, responded_at: new Date().toISOString(),
+      })
+      setPlayerSearch('')
+      setSearchResults([])
+      await loadParticipants()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add player')
     } finally {
@@ -118,340 +62,98 @@ export default function AttendanceDashboard() {
     }
   }
 
-  async function prepareBulk() {
-    if (!bulkText.trim() || !match) return
-    setBulkChecking(true)
-
-    const names = bulkText
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
-
-    // Load full registry and existing participants once
-    const { data: allPlayers } = await supabase.from('players').select('*')
-    const registry = (allPlayers as Player[]) ?? []
-    const candidates = registry.map((p) => ({ id: p.id, name: p.name }))
-    const existingPlayerIds = new Set(participants.map((p) => p.player_id))
-
-    const rows: BulkRow[] = names.map((inputName) => {
-      const fuzzyResult = fuzzyMatchName(inputName, candidates)
-      if (!fuzzyResult) return { inputName, status: 'new', useExisting: false }
-
-      const player = registry.find((p) => p.id === fuzzyResult.candidate.id)!
-      if (existingPlayerIds.has(player.id)) {
-        return { inputName, status: 'already_in_match', registryPlayer: player, useExisting: true }
-      }
-      return { inputName, status: 'registry_match', registryPlayer: player, useExisting: true }
-    })
-
-    setBulkRows(rows)
-    setBulkStep('review')
-    setBulkChecking(false)
-  }
-
-  function toggleUseExisting(index: number) {
-    setBulkRows((prev) => prev.map((r, i) => i === index ? { ...r, useExisting: !r.useExisting } : r))
-  }
-
-  async function applyBulk() {
-    if (!match) return
-    setBulkApplying(true)
-
-    let added = 0
-    let skipped = 0
-
-    for (const row of bulkRows) {
-      if (row.status === 'already_in_match') { skipped++; continue }
-      try {
-        let playerId: string
-
-        if (row.status === 'registry_match' && row.useExisting && row.registryPlayer) {
-          playerId = row.registryPlayer.id
-        } else {
-          const syntheticMobile = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-          const { data: newPlayer, error } = await supabase
-            .from('players')
-            .insert({ name: row.inputName, mobile_number: syntheticMobile })
-            .select()
-            .single()
-          if (error) { skipped++; continue }
-          playerId = newPlayer.id
-        }
-
-        const { error: partError } = await supabase.from('participation').insert({
-          match_id: match.id,
-          player_id: playerId,
-          status: 'playing',
-          is_guest: row.status === 'new',
-          added_by_organizer: true,
-          responded_at: new Date().toISOString(),
-        })
-        if (partError) { skipped++; continue }
-        added++
-      } catch { skipped++ }
-    }
-
-    setBulkSummary(`Added ${added} player${added !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped` : ''}`)
-    setBulkStep('done')
+  async function addFromBulk() {
+    if (!bulkText.trim() || !id) return
+    setAdding(true)
+    const names = bulkText.split('\n').map(cleanPlayerName).filter(Boolean)
+    for (const name of names) await addPlayer(name)
     setBulkText('')
-    if (id) loadData(id)
-    setBulkApplying(false)
+    setAdding(false)
   }
 
-  async function removeParticipant(participationId: string) {
-    if (!confirm('Remove this player from the match?')) return
-    await supabase.from('participation').delete().eq('id', participationId)
-    if (id) loadData(id)
+  async function removeParticipant(partId: string) {
+    await supabase.from('participation').delete().eq('id', partId)
+    setParticipants((prev) => prev.filter((p) => p.id !== partId))
   }
 
-  async function saveEdit(playerId: string) {
-    if (!editName.trim()) return
-    await supabase.from('players').update({ name: editName.trim() }).eq('id', playerId)
-    setEditingId(null)
-    if (id) loadData(id)
+  async function toggleStatus(partId: string, current: string) {
+    const next = current === 'playing' ? 'not_playing' : 'playing'
+    await supabase.from('participation').update({ status: next }).eq('id', partId)
+    setParticipants((prev) => prev.map((p) => p.id === partId ? { ...p, status: next as any } : p))
   }
 
-  if (loading) {
-    return <div className="text-zinc-500 text-sm py-12 text-center">Loading…</div>
-  }
+  const playing = participants.filter((p) => p.status === 'playing')
+  const notPlaying = participants.filter((p) => p.status !== 'playing')
 
-  if (error || !match) {
-    return (
-      <div className="px-4 py-12 text-center">
-        <p className="text-red-400 text-sm mb-3">{error ?? 'Match not found'}</p>
-        <Link to="/" className="text-emerald-400 text-sm">← Back home</Link>
-      </div>
-    )
-  }
+  if (loading) return <div className="text-zinc-500 text-sm py-12 text-center">Loading…</div>
 
   return (
     <div className="flex flex-col flex-1 px-4 pb-10">
       <header className="pt-6 pb-4">
-        <Link to={`/match/${match.id}`} className="text-sm text-zinc-500 mb-2 inline-block">
-          ← Back to match
-        </Link>
+        <Link to={`/event/${id}`} className="text-sm text-zinc-500 mb-2 inline-block">← Back</Link>
         <h1 className="text-xl font-bold text-white">Attendance</h1>
-        <p className="text-sm text-zinc-400">{match.match_name}</p>
       </header>
 
-      {/* Add controls */}
-      {!showAddGuest && bulkStep === 'hidden' && (
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => setShowAddGuest(true)}
-            className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm"
-          >
-            + Add Player
-          </button>
-          <button
-            onClick={() => setBulkStep('paste')}
-            className="flex-1 bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium rounded-xl py-3 text-sm"
-          >
-            📋 Bulk Add
-          </button>
-        </div>
-      )}
-
-      {showAddGuest && (
-        <form onSubmit={addGuest} className="flex gap-2 mb-4">
-          <input
-            type="text"
-            value={guestName}
-            onChange={(e) => setGuestName(e.target.value)}
-            placeholder="Player name"
-            className="input"
-            autoFocus
-          />
-          <button type="submit" disabled={adding} className="px-4 bg-emerald-500 text-zinc-950 font-semibold rounded-lg text-sm disabled:opacity-50">
-            Add
-          </button>
-          <button type="button" onClick={() => { setShowAddGuest(false); setGuestName('') }} className="px-3 bg-zinc-800 text-zinc-400 rounded-lg text-sm">
-            ✕
-          </button>
-        </form>
-      )}
-
-      {/* Bulk add — step 1: paste */}
-      {bulkStep === 'paste' && (
-        <div className="flex flex-col gap-2 mb-4">
-          <textarea
-            value={bulkText}
-            onChange={(e) => setBulkText(e.target.value)}
-            placeholder={'Paste names, one per line:\nRaj\nNitin\nVipul\nRahul'}
-            className="input min-h-[140px] resize-none"
-            autoFocus
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={prepareBulk}
-              disabled={bulkChecking || !bulkText.trim()}
-              className="flex-1 bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm disabled:opacity-50"
-            >
-              {bulkChecking ? 'Checking registry…' : 'Review'}
-            </button>
-            <button
-              onClick={() => { setBulkStep('hidden'); setBulkText('') }}
-              className="px-4 bg-zinc-800 text-zinc-400 rounded-lg text-sm"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk add — step 2: review duplicates */}
-      {bulkStep === 'review' && (
-        <div className="flex flex-col gap-2 mb-4">
-          <p className="text-sm font-semibold text-white">Review before adding:</p>
-          <div className="flex flex-col gap-1.5 max-h-[360px] overflow-y-auto">
-            {bulkRows.map((row, i) => (
-              <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-white">{row.inputName}</span>
-                  {row.status === 'already_in_match' && (
-                    <span className="text-xs text-zinc-500">Already in match</span>
-                  )}
-                  {row.status === 'new' && (
-                    <span className="text-xs text-emerald-400">New player</span>
-                  )}
-                  {row.status === 'registry_match' && (
-                    <button
-                      onClick={() => toggleUseExisting(i)}
-                      className={`text-xs px-2 py-0.5 rounded border ${
-                        row.useExisting
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                      }`}
-                    >
-                      {row.useExisting ? `✓ Use "${row.registryPlayer?.name}"` : '+ Create new'}
-                    </button>
-                  )}
-                </div>
-                {row.status === 'registry_match' && (
-                  <p className="text-xs text-zinc-500 mt-0.5">
-                    Registry match: {row.registryPlayer?.name}
-                    {row.registryPlayer?.mobile_number && ` · ${row.registryPlayer.mobile_number}`}
-                    {' '}— tap button to toggle
-                  </p>
-                )}
-              </div>
+      {/* Search */}
+      <div className="relative mb-2">
+        <input type="text" value={playerSearch} onChange={(e) => { setPlayerSearch(e.target.value); setError(null) }}
+          placeholder="Search & add player…" className="input text-sm" />
+        {searchResults.length > 0 && (
+          <div className="absolute top-full left-0 right-0 bg-zinc-800 border border-zinc-700 rounded-xl mt-1 z-10 overflow-hidden">
+            {searchResults.map((p) => (
+              <button key={p.id} onClick={() => addPlayer(p.name, p.id)}
+                className="w-full text-left px-3 py-2.5 text-sm text-white active:bg-zinc-700">
+                {p.name}
+              </button>
             ))}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={applyBulk}
-              disabled={bulkApplying}
-              className="flex-1 bg-emerald-500 text-zinc-950 font-semibold rounded-lg py-2.5 text-sm disabled:opacity-50"
-            >
-              {bulkApplying ? 'Adding…' : `Add ${bulkRows.filter((r) => r.status !== 'already_in_match').length} Players`}
-            </button>
-            <button
-              onClick={() => setBulkStep('paste')}
-              className="px-4 bg-zinc-800 text-zinc-400 rounded-lg text-sm"
-            >
-              Back
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk add — step 3: done */}
-      {bulkStep === 'done' && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 mb-4 flex items-center justify-between">
-          <span className="text-sm text-emerald-400">{bulkSummary}</span>
-          <button
-            onClick={() => { setBulkStep('hidden'); setBulkSummary(null); setBulkRows([]) }}
-            className="text-xs text-zinc-500"
-          >
-            Done
-          </button>
-        </div>
-      )}
-
-      {error && (
-        <div className="text-red-400 text-sm py-2 px-3 bg-red-500/10 rounded-lg border border-red-500/20 mb-4">
-          {error}
-        </div>
-      )}
-
-      <div className="flex flex-col gap-2">
-        {participants.length === 0 && (
-          <div className="text-zinc-600 text-sm py-8 text-center border border-dashed border-zinc-800 rounded-lg">
-            No players yet
+            {!searchResults.find((p) => p.name.toLowerCase() === playerSearch.toLowerCase()) && (
+              <button onClick={() => addPlayer(playerSearch)}
+                className="w-full text-left px-3 py-2.5 text-sm text-emerald-400 active:bg-zinc-700">
+                + Add "{playerSearch}" as new player
+              </button>
+            )}
           </div>
         )}
+      </div>
 
-        {participants.map((p) => (
-          <div
-            key={p.id}
-            className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5"
-          >
-            <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-semibold text-zinc-300 shrink-0">
-              {p.player?.name?.[0]?.toUpperCase() ?? '?'}
-            </div>
+      {/* Bulk paste */}
+      <textarea value={bulkText} onChange={(e) => setBulkText(e.target.value)}
+        placeholder="Paste list (one per line)" className="input text-sm h-20 resize-none mb-2" />
+      {bulkText.trim() && (
+        <button onClick={addFromBulk} disabled={adding} className="w-full bg-zinc-800 text-zinc-300 rounded-lg py-2 text-sm mb-4">
+          {adding ? 'Adding…' : `Add ${bulkText.split('\n').filter((l) => cleanPlayerName(l)).length} players`}
+        </button>
+      )}
 
-            <div className="flex-1 min-w-0">
-              {editingId === p.player_id ? (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="input py-1 text-sm"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => saveEdit(p.player_id)}
-                    className="text-emerald-400 text-sm font-medium shrink-0"
-                  >
-                    Save
-                  </button>
-                </div>
-              ) : (
-                <div className="text-sm text-white truncate">{p.player?.name ?? 'Unknown'}</div>
-              )}
-              <div className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1.5">
-                <StatusDot status={p.status} />
-                {p.status === 'playing' ? 'Playing' : p.status === 'not_playing' ? 'Not playing' : 'Pending'}
-                {p.is_guest && <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px]">Guest</span>}
-              </div>
-            </div>
+      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
-            <div className="flex gap-1 shrink-0">
-              {editingId !== p.player_id && (
-                <button
-                  onClick={() => {
-                    setEditingId(p.player_id)
-                    setEditName(p.player?.name ?? '')
-                  }}
-                  className="text-zinc-500 text-xs px-2 py-1"
-                >
-                  Edit
-                </button>
-              )}
-              <button
-                onClick={() => removeParticipant(p.id)}
-                className="text-red-400 text-xs px-2 py-1"
-              >
-                Remove
-              </button>
+      {/* Playing */}
+      <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Playing ({playing.length})</h2>
+      <div className="flex flex-col gap-1.5 mb-4">
+        {playing.map((p) => (
+          <div key={p.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+            <span className="text-sm text-white">{p.player?.name}</span>
+            <div className="flex gap-3">
+              <button onClick={() => toggleStatus(p.id, p.status)} className="text-xs text-zinc-500">Not playing</button>
+              <button onClick={() => removeParticipant(p.id)} className="text-xs text-red-400">Remove</button>
             </div>
           </div>
         ))}
       </div>
 
-      <p className="text-xs text-zinc-600 mt-6 text-center">
-        Duplicate players merge automatically by mobile number when they join.
-      </p>
+      {notPlaying.length > 0 && (
+        <>
+          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Not Playing ({notPlaying.length})</h2>
+          <div className="flex flex-col gap-1.5">
+            {notPlaying.map((p) => (
+              <div key={p.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 opacity-60">
+                <span className="text-sm text-white">{p.player?.name}</span>
+                <button onClick={() => toggleStatus(p.id, p.status)} className="text-xs text-emerald-400">Mark playing</button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
-}
-
-function StatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    playing: 'bg-emerald-500',
-    not_playing: 'bg-zinc-500',
-    pending: 'bg-amber-500',
-  }
-  return <span className={`w-1.5 h-1.5 rounded-full inline-block ${colors[status] ?? colors.pending}`} />
 }

@@ -1,4 +1,4 @@
-export function generateMatchCode(): string {
+export function generateCode(): string {
   const num = Math.floor(10000 + Math.random() * 90000)
   return `CRK-${num}`
 }
@@ -10,9 +10,7 @@ export function generateJoinToken(): string {
 }
 
 export function generateAdminToken(): string {
-  if (typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
   bytes[6] = (bytes[6] & 0x0f) | 0x40
@@ -26,13 +24,32 @@ export function buildJoinUrl(joinToken: string): string {
   return `${base}/#/join/${joinToken}`
 }
 
-export function buildWhatsAppShareMessage(matchName: string, dateStr: string, timeStr: string | null, joinUrl: string): string {
+export function buildWhatsAppMessage(eventName: string, dateStr: string, timeStr: string | null, joinUrl: string): string {
   const lines = [
-    `🏏 ${matchName}`,
+    `🏏 ${eventName}`,
     `📅 ${dateStr}${timeStr ? ` at ${timeStr}` : ''}`,
-    ``,
-    `Tap to confirm if you're playing:`,
+    '',
+    'Tap to confirm if you\'re playing:',
     joinUrl,
   ]
   return encodeURIComponent(lines.join('\n'))
+}
+
+export function cleanPlayerName(raw: string): string {
+  return raw
+    .replace(/^\d+\s*[.)]\s*/, '')
+    .replace(/^\d+\s+/, '')
+    .replace(/^[-•*]\s*/, '')
+    .replace(/[\u200b-\u200d\ufeff]/g, '')
+    .trim()
+}
+
+export function formatDate(dateStr: string): string {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+export function formatTime(timeStr: string): string {
+  const [h, m] = timeStr.split(':')
+  const hour = parseInt(h)
+  return `${hour % 12 || 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
 }

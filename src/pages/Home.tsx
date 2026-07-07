@@ -1,216 +1,112 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import type { Match } from '../types'
+import { formatDate } from '../lib/matchUtils'
+import type { Event, Match } from '../types'
 
-interface MatchWithInnings extends Match {
-  innings?: Array<{
-    id: string
-    innings_number: number
-    status: string
-    batting_team_id: string
-    bowling_team_id: string
-    overs_limit: number
-    target: number | null
-  }>
-  teamNames?: Record<string, string>
-}
-
-interface DateGroup {
-  date: string
-  matches: MatchWithInnings[]
+interface EventWithMatches extends Event {
+  matches: Match[]
 }
 
 export default function Home() {
-  const [groups, setGroups] = useState<DateGroup[]>([])
+  const [events, setEvents] = useState<EventWithMatches[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
-  async function deleteMatch(matchId: string) {
-    await supabase.from('deliveries').delete().eq('innings_id',
-      (await supabase.from('innings').select('id').eq('match_id', matchId)).data?.map((i: {id: string}) => i.id) ?? []
-    )
-    await supabase.from('innings').delete().eq('match_id', matchId)
-    await supabase.from('team_members').delete().eq('match_id', matchId)
-    await supabase.from('teams').delete().eq('match_id', matchId)
-    await supabase.from('participation').delete().eq('match_id', matchId)
-    await supabase.from('matches').delete().eq('id', matchId)
-    setGroups((prev) => prev.map((g) => ({ ...g, matches: g.matches.filter((m) => m.id !== matchId) })).filter((g) => g.matches.length > 0))
+  async function loadEvents() {
+    const { data: eventsData } = await supabase
+      .from('events')
+      .select('*')
+      .order('event_date', { ascending: false })
+      .limit(30)
+
+    if (!eventsData) { setLoading(false); return }
+
+    const eventIds = eventsData.map((e) => e.id)
+    const { data: matchesData } = await supabase
+      .from('matches')
+      .select('*')
+      .in('event_id', eventIds)
+      .order('game_number', { ascending: true })
+
+    const matchesByEvent: Record<string, Match[]> = {}
+    for (const m of (matchesData ?? [])) {
+      if (!matchesByEvent[m.event_id]) matchesByEvent[m.event_id] = []
+      matchesByEvent[m.event_id].push(m as Match)
+    }
+
+    setEvents(eventsData.map((e) => ({ ...e, matches: matchesByEvent[e.id] ?? [] } as EventWithMatches)))
+    setLoading(false)
   }
 
-  useEffect(() => {
-    async function loadMatches() {
-      setLoading(true)
-      setError(null)
+  useEffect(() => { loadEvents() }, [])
 
-      const { data, error } = await supabase
-        .from('matches')
-        .select('*, ground:grounds(*)')
-        .order('match_date', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(100)
+  async function deleteEvent(eventId: string) {
+    await supabase.from('events').delete().eq('id', eventId)
+    setEvents((prev) => prev.filter((e) => e.id !== eventId))
+  }
 
-      if (error) { setError(error.message); setLoading(false); return }
-
-      const matches = (data as MatchWithInnings[]) ?? []
-
-      // Load innings and team names for completed/live matches
-      for (const match of matches) {
-        if (match.status === 'completed' || match.status === 'live') {
-          const { data: innings } = await supabase
-            .from('innings')
-            .select('id, innings_number, status, batting_team_id, bowling_team_id, overs_limit, target')
-            .eq('match_id', match.id)
-            .order('innings_number', { ascending: true })
-          match.innings = innings ?? []
-
-          if (match.innings.length > 0) {
-            const teamIds = [...new Set(match.innings.flatMap((i) => [i.batting_team_id, i.bowling_team_id]))]
-            const { data: teams } = await supabase
-              .from('teams')
-              .select('id, name')
-              .in('id', teamIds)
-            match.teamNames = Object.fromEntries((teams ?? []).map((t) => [t.id, t.name]))
-          }
-        }
-      }
-
-      // Group by date, ordered most recent first
-      const byDate = new Map<string, MatchWithInnings[]>()
-      for (const match of matches) {
-        const list = byDate.get(match.match_date) ?? []
-        // Within a date, sort ascending by created_at so Game 1 = earliest
-        list.push(match)
-        byDate.set(match.match_date, list)
-      }
-
-      const grouped: DateGroup[] = Array.from(byDate.entries()).map(([date, ms]) => ({
-        date,
-        matches: [...ms].sort((a, b) => a.created_at.localeCompare(b.created_at)),
-      }))
-
-      setGroups(grouped)
-      setLoading(false)
-    }
-    loadMatches()
-  }, [])
+  if (loading) return <div className="text-zinc-500 text-sm py-12 text-center">Loading…</div>
 
   return (
-    <div className="flex flex-col flex-1 px-4 pb-24">
+    <div className="flex flex-col flex-1 px-4 pb-10">
       <header className="pt-6 pb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">MatchMates</h1>
-          <p className="text-sm text-zinc-400">Cricket, organized.</p>
-        </div>
+        <h1 className="text-xl font-bold text-white">🏏 MatchMates</h1>
+        <Link to="/admin/players" className="text-xs text-zinc-500 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg">Players</Link>
       </header>
 
-      <Link
-        to="/create"
-        className="w-full bg-emerald-500 active:bg-emerald-600 text-zinc-950 font-semibold rounded-xl py-3.5 text-center text-base shadow-lg shadow-emerald-500/20 mb-6"
-      >
-        + Create Match
+      <Link to="/event/create" className="w-full bg-emerald-500 text-zinc-950 font-semibold rounded-xl py-3.5 text-center text-base mb-6">
+        + New Match Day
       </Link>
 
-      {loading && <div className="text-zinc-500 text-sm py-8 text-center">Loading matches…</div>}
-
-      {error && (
-        <div className="text-red-400 text-sm py-4 px-3 bg-red-500/10 rounded-lg border border-red-500/20">
-          {error}
+      {events.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-zinc-500 text-sm">No match days yet.</p>
+          <p className="text-zinc-600 text-xs mt-1">Tap "+ New Match Day" to get started.</p>
         </div>
       )}
 
-      {!loading && !error && groups.length === 0 && (
-        <div className="text-zinc-500 text-sm py-8 text-center border border-dashed border-zinc-700 rounded-xl">
-          No matches yet. Create your first one above.
-        </div>
-      )}
-
-      <div className="flex flex-col gap-6">
-        {groups.map((group) => (
-          <div key={group.date}>
-            <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">
-              {formatDate(group.date)}
-            </h2>
-            <div className="flex flex-col gap-2">
-              {group.matches.map((match, i) => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  gameNumber={group.matches.length > 1 ? i + 1 : null}
-                  onDelete={deleteMatch}
-                />
-              ))}
-            </div>
-          </div>
+      <div className="flex flex-col gap-3">
+        {events.map((event) => (
+          <EventCard key={event.id} event={event} onDelete={deleteEvent} />
         ))}
       </div>
-
-      <Link to="/admin/players" className="text-xs text-zinc-600 text-center mt-8 mb-2">
-        Admin · Manage Players
-      </Link>
     </div>
   )
 }
 
-function MatchCard({ match, gameNumber, onDelete }: { match: MatchWithInnings; gameNumber: number | null; onDelete: (id: string) => void }) {
-  const result = getResultText(match)
+function EventCard({ event, onDelete }: { event: EventWithMatches; onDelete: (id: string) => void }) {
   const [confirming, setConfirming] = useState(false)
 
   return (
-    <div className="relative flex items-stretch gap-2">
-      <Link
-        to={`/match/${match.id}`}
-        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl p-4 active:bg-zinc-800 transition-colors block"
-      >
+    <div className="flex items-stretch gap-2">
+      <Link to={`/event/${event.id}`} className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl p-4 active:bg-zinc-800 block">
         <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2 min-w-0">
-            {gameNumber && (
-              <span className="text-xs text-emerald-400 font-semibold shrink-0">
-                Game {gameNumber}
+          <span className="font-semibold text-white">{event.event_name}</span>
+          <EventStatusBadge status={event.status} matchCount={event.matches.length} />
+        </div>
+        <div className="text-xs text-zinc-500">{formatDate(event.event_date)}</div>
+        {event.matches.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {event.matches.map((m) => (
+              <span key={m.id} className={`text-xs px-2 py-0.5 rounded-full border ${
+                m.status === 'live' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' :
+                m.status === 'completed' ? 'text-zinc-400 border-zinc-700' :
+                'text-zinc-500 border-zinc-800'
+              }`}>
+                Game {m.game_number}
               </span>
-            )}
-            <span className="font-semibold text-white truncate">{match.match_name}</span>
+            ))}
           </div>
-          <StatusBadge status={match.status} />
-        </div>
-
-      {match.match_time && (
-        <div className="text-xs text-zinc-500 mt-0.5">{formatTime(match.match_time)}</div>
-      )}
-
-      {match.ground?.name && (
-        <div className="text-xs text-zinc-500 mt-0.5">📍 {match.ground.name}</div>
-      )}
-
-      {result && (
-        <div className="text-xs text-emerald-400 font-medium mt-1.5">{result}</div>
-      )}
-
-      {!result && match.innings && match.innings.length > 0 && (
-        <div className="text-xs text-zinc-500 mt-1.5">
-          {match.innings.map((inn) => {
-            const teamName = match.teamNames?.[inn.batting_team_id] ?? 'Team'
-            return (
-              <span key={inn.id} className="mr-3">
-                {teamName}: {inn.status === 'active' ? 'batting…' : 'completed'}
-              </span>
-            )
-          })}
-        </div>
-      )}
+        )}
       </Link>
       {!confirming ? (
-        <button
-          onClick={() => setConfirming(true)}
-          style={{ background: '#ef4444', borderRadius: '12px', padding: '0 16px', color: 'white', fontWeight: 'bold', fontSize: '16px', minWidth: '44px' }}
-        >
+        <button onClick={() => setConfirming(true)}
+          style={{ background: '#ef4444', borderRadius: '12px', padding: '0 14px', color: 'white', fontWeight: 'bold', fontSize: '16px' }}>
           ✕
         </button>
       ) : (
-        <button
-          onClick={() => onDelete(match.id)}
-          style={{ background: '#dc2626', borderRadius: '12px', padding: '0 12px', color: 'white', fontSize: '12px', fontWeight: '600', minWidth: '44px' }}
-        >
+        <button onClick={() => onDelete(event.id)}
+          style={{ background: '#dc2626', borderRadius: '12px', padding: '0 10px', color: 'white', fontSize: '12px', fontWeight: '600' }}>
           Del?
         </button>
       )}
@@ -218,47 +114,9 @@ function MatchCard({ match, gameNumber, onDelete }: { match: MatchWithInnings; g
   )
 }
 
-function getResultText(match: MatchWithInnings): string | null {
-  if (match.result_summary) return `🏆 ${match.result_summary}`
-  if (match.status === 'live' && match.innings && match.innings.length > 0) {
-    const activeInn = match.innings.find((i) => i.status === 'active')
-    if (activeInn) {
-      const teamName = match.teamNames?.[activeInn.batting_team_id] ?? 'Team'
-      return `${teamName} batting`
-    }
-  }
-  return null
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    created: 'bg-blue-500/15 text-blue-400',
-    live: 'bg-emerald-500/15 text-emerald-400',
-    completed: 'bg-zinc-500/15 text-zinc-400',
-    cancelled: 'bg-red-500/15 text-red-400',
-  }
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${styles[status] ?? styles.created}`}>
-      {status}
-    </span>
-  )
-}
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  const today = new Date()
-  const yesterday = new Date(today)
-  yesterday.setDate(today.getDate() - 1)
-
-  if (d.toDateString() === today.toDateString()) return 'Today'
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function formatTime(timeStr: string): string {
-  const [h, m] = timeStr.split(':')
-  const hour = parseInt(h, 10)
-  const ampm = hour >= 12 ? 'PM' : 'AM'
-  const displayHour = hour % 12 === 0 ? 12 : hour % 12
-  return `${displayHour}:${m} ${ampm}`
+function EventStatusBadge({ status, matchCount }: { status: string; matchCount: number }) {
+  if (status === 'live') return <span className="text-xs text-emerald-400 font-semibold">● Live</span>
+  if (status === 'completed') return <span className="text-xs text-zinc-500">Completed</span>
+  if (matchCount === 0) return <span className="text-xs text-zinc-600">No games yet</span>
+  return <span className="text-xs text-zinc-500">{matchCount} game{matchCount !== 1 ? 's' : ''}</span>
 }
