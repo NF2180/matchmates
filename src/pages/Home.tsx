@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Match } from '../types'
 
