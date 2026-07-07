@@ -39,6 +39,7 @@ export default function EventDetail() {
     if (!event || !id) return
     setCreatingGame(true)
     const gameNumber = matches.length + 1
+
     const { data: match } = await supabase.from('matches').insert({
       event_id: id,
       game_number: gameNumber,
@@ -48,8 +49,35 @@ export default function EventDetail() {
       overs: 20,
       status: 'created',
     }).select().single()
-    if (match) navigate(`/match/${match.id}`)
+
+    if (!match) { setCreatingGame(false); return }
+
+    // Copy teams from previous game if exists
+    const prevMatch = matches[matches.length - 1]
+    if (prevMatch) {
+      const { data: prevTeams } = await supabase.from('teams').select('id, name').eq('match_id', prevMatch.id)
+      const { data: prevMembers } = await supabase.from('team_members').select('participation_id, team_id, role').eq('match_id', prevMatch.id)
+
+      if (prevTeams && prevTeams.length >= 2) {
+        for (const prevTeam of prevTeams) {
+          const { data: newTeam } = await supabase.from('teams').insert({ match_id: match.id, name: prevTeam.name }).select().single()
+          if (!newTeam) continue
+          const teamMembers = (prevMembers ?? []).filter((m: any) => m.team_id === prevTeam.id)
+          for (const m of teamMembers) {
+            await supabase.from('team_members').insert({
+              match_id: match.id,
+              participation_id: m.participation_id,
+              team_id: newTeam.id,
+              role: m.role,
+            })
+          }
+        }
+      }
+    }
+
+    navigate(`/match/${match.id}/teams`)
     setCreatingGame(false)
+  }
   }
 
   function copyJoinLink() {
