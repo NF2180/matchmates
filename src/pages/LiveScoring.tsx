@@ -35,7 +35,6 @@ export default function LiveScoring() {
   const [battingPlayers, setBattingPlayers] = useState<Player[]>([])
   const [bowlingPlayers, setBowlingPlayers] = useState<Player[]>([])
   const [wicketKeeperId, setWicketKeeperId] = useState<string | null>(null)
-  const [eventId, setEventId] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)

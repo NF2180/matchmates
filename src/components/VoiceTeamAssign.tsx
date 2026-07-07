@@ -263,7 +263,7 @@ export default function VoiceTeamAssign({ matchId, teamA, teamB, participants, o
 
         const part: Participation = {
           id: newParticipation.id,
-          match_id: matchId,
+          event_id: matchId,
           player_id: playerId,
           status: 'playing',
           is_guest: false,

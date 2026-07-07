@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import type { Match, Event, Participation } from '../types'
 
 export default function MatchDetail() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const [match, setMatch] = useState<Match | null>(null)
   const [event, setEvent] = useState<Event | null>(null)
   const [participants, setParticipants] = useState<Participation[]>([])
