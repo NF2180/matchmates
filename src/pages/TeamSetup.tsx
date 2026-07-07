@@ -125,9 +125,9 @@ export default function TeamSetup() {
     </div>
   )
   if (loading) return <div className="text-zinc-500 text-sm py-12 text-center">Loading…</div>
-  if (error || !match || !teamA || !teamB) return (
+  if (!match || !teamA || !teamB) return (
     <div className="px-4 py-12 text-center">
-      <p className="text-red-400 text-sm mb-3">{error ?? 'Match not found'}</p>
+      <p className="text-red-400 text-sm mb-3">Match not found</p>
       <Link to="/" className="text-emerald-400 text-sm">← Back</Link>
     </div>
   )
