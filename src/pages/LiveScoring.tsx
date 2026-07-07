@@ -296,14 +296,6 @@ export default function LiveScoring() {
         fielder_id: d.fielder_id as string | null,
         is_legal: d.is_legal as boolean,
       })) as Delivery[]
-        extra_type: d.extra_type,
-        is_free_hit: d.is_free_hit,
-        is_wicket: d.is_wicket,
-        wicket_type: d.wicket_type,
-        dismissed_player_id: d.dismissed_player_id,
-        fielder_id: d.fielder_id,
-        is_legal: d.is_legal,
-      }))
 
       setDeliveries(mapped)
       const computed = computeInningsState(mapped, battingPlayers.length, innings.overs_limit, innings.target)
