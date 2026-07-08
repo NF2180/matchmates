@@ -13,6 +13,7 @@ export default function MatchDetail() {
 
   // Admin access is checked at event level
   const [eventId, setEventId] = useState<string | undefined>()
+  const [inningsList, setInningsList] = useState<{ id: string; innings_number: number; status: string }[]>([])
   const adminState = useAdminAccess(eventId)
   const isAdmin = adminState === 'admin'
 
@@ -29,6 +30,10 @@ export default function MatchDetail() {
 
       const { data: parts } = await supabase.from('participation').select('*, player:players(*)').eq('event_id', m.event_id)
       setParticipants((parts as Participation[]) ?? [])
+
+      const { data: innings } = await supabase.from('innings').select('id, innings_number, status').eq('match_id', id).order('innings_number')
+      setInningsList(innings ?? [])
+
       setLoading(false)
     }
     load()
@@ -58,23 +63,40 @@ export default function MatchDetail() {
       </header>
 
       {/* Scoring */}
-      {isAdmin && match.status === 'live' && match.current_innings_id ? (
-        <Link to={`/match/${id}/scoring/${match.current_innings_id}`}
-          className="w-full bg-emerald-500 text-zinc-950 font-bold rounded-xl py-3.5 text-center text-base mb-3 flex items-center justify-center gap-2">
-          🏏 Resume Scoring
-        </Link>
-      ) : isAdmin && match.status === 'created' && match.batting_first_team_id ? (
-        <Link to={`/match/${id}/innings/1`}
-          className="w-full bg-emerald-500 text-zinc-950 font-bold rounded-xl py-3.5 text-center text-base mb-3 flex items-center justify-center gap-2">
-          🏏 Start Innings 1
-        </Link>
-      ) : isAdmin && match.status === 'created' ? (
-        <div className="bg-zinc-900 border border-dashed border-zinc-700 rounded-xl py-3 text-center text-xs text-zinc-500 mb-3">
-          Set up teams and toss to start scoring
-        </div>
-      ) : match.status === 'completed' ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl py-3 text-center text-xs text-zinc-500 mb-3">Match completed</div>
-      ) : null}
+      {(() => {
+        const inn1 = inningsList.find((i) => i.innings_number === 1)
+        const inn2 = inningsList.find((i) => i.innings_number === 2)
+        const activeInnings = inningsList.find((i) => i.status === 'active')
+
+        if (!isAdmin) return null
+        if (match.status === 'completed') return (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl py-3 text-center text-xs text-zinc-500 mb-3">Match completed</div>
+        )
+        if (activeInnings) return (
+          <Link to={`/match/${id}/scoring/${activeInnings.id}`}
+            className="w-full bg-emerald-500 text-zinc-950 font-bold rounded-xl py-3.5 text-center text-base mb-3 flex items-center justify-center gap-2">
+            🏏 Resume Innings {activeInnings.innings_number} Scoring
+          </Link>
+        )
+        if (inn1?.status === 'completed' && !inn2) return (
+          <Link to={`/match/${id}/innings/2`}
+            className="w-full bg-emerald-500 text-zinc-950 font-bold rounded-xl py-3.5 text-center text-base mb-3 flex items-center justify-center gap-2">
+            🏏 Start Innings 2
+          </Link>
+        )
+        if (!inn1 && match.batting_first_team_id) return (
+          <Link to={`/match/${id}/innings/1`}
+            className="w-full bg-emerald-500 text-zinc-950 font-bold rounded-xl py-3.5 text-center text-base mb-3 flex items-center justify-center gap-2">
+            🏏 Start Innings 1
+          </Link>
+        )
+        if (!inn1) return (
+          <div className="bg-zinc-900 border border-dashed border-zinc-700 rounded-xl py-3 text-center text-xs text-zinc-500 mb-3">
+            Set up teams and toss to start scoring
+          </div>
+        )
+        return null
+      })()}
 
       {/* Scorecard */}
       {(match.status === 'live' || match.status === 'completed') && (
