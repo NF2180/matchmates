@@ -52,11 +52,18 @@ export default function EventDetail() {
 
     if (!match) { setCreatingGame(false); return }
 
-    // Copy teams from previous game if exists
-    const prevMatch = matches[matches.length - 1]
-    if (prevMatch) {
-      const { data: prevTeams } = await supabase.from('teams').select('id, name').eq('match_id', prevMatch.id)
-      const { data: prevMembers } = await supabase.from('team_members').select('participation_id, team_id, role').eq('match_id', prevMatch.id)
+    // Copy teams from previous game — fetch fresh from DB
+    const { data: prevMatches } = await supabase
+      .from('matches')
+      .select('id')
+      .eq('event_id', id)
+      .eq('game_number', gameNumber - 1)
+      .single()
+
+    if (prevMatches) {
+      const prevMatchId = prevMatches.id
+      const { data: prevTeams } = await supabase.from('teams').select('id, name').eq('match_id', prevMatchId)
+      const { data: prevMembers } = await supabase.from('team_members').select('participation_id, team_id, role').eq('match_id', prevMatchId)
 
       if (prevTeams && prevTeams.length >= 2) {
         for (const prevTeam of prevTeams) {
