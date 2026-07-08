@@ -60,16 +60,18 @@ export default function EventDetail() {
 
       if (prevTeams && prevTeams.length >= 2) {
         for (const prevTeam of prevTeams) {
-          const { data: newTeam } = await supabase.from('teams').insert({ match_id: match.id, name: prevTeam.name }).select().single()
+          const { data: newTeam, error: teamErr } = await supabase.from('teams').insert({ match_id: match.id, name: prevTeam.name }).select().single()
+          if (teamErr) { console.error('team insert error:', teamErr); continue }
           if (!newTeam) continue
           const teamMembers = (prevMembers ?? []).filter((m: any) => m.team_id === prevTeam.id)
           for (const m of teamMembers) {
-            await supabase.from('team_members').insert({
+            const { error: memberErr } = await supabase.from('team_members').insert({
               match_id: match.id,
               participation_id: m.participation_id,
               team_id: newTeam.id,
               role: m.role,
             })
+            if (memberErr) console.error('member insert error:', memberErr, m)
           }
         }
       }
