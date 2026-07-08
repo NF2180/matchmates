@@ -971,7 +971,7 @@ export default function LiveScoring() {
                   <div key={overNum} className="mb-4">
                     <p className="text-xs text-zinc-500 font-semibold mb-2">Over {overNum + 1}</p>
                     <div className="flex flex-wrap gap-2">
-                      {overDeliveries.map((d, i) => {
+                      {overDeliveries.map((d) => {
                         const isWide = d.extra_type === 'wide'
                         const isNoBall = d.extra_type === 'no_ball'
                         const isBye = d.extra_type === 'bye'
