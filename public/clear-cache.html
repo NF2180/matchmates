@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head><title>Clearing cache...</title></head>
+<body style="background:#0f1115;color:#fff;font-family:sans-serif;text-align:center;padding-top:80px">
+<h2>Updating MatchMates...</h2>
+<p id="msg">Clearing old cache...</p>
+<script>
+async function clear() {
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations()
+    for (const r of regs) await r.unregister()
+  }
+  if ('caches' in window) {
+    const keys = await caches.keys()
+    for (const k of keys) await caches.delete(k)
+  }
+  document.getElementById('msg').textContent = 'Done! Redirecting...'
+  setTimeout(() => { window.location.href = '/matchmates/' }, 1000)
+}
+clear()
+</script>
+</body>
+</html>
