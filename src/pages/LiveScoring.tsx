@@ -7,6 +7,7 @@ import { loadDeliveries, saveDelivery, deleteLastDelivery, completeInnings, comp
 import type { InningsRow } from '../lib/scoringDb'
 import WicketModal from '../components/WicketModal'
 import type { WicketResult } from '../components/WicketModal'
+import EditDeliveryModal from '../components/EditDeliveryModal'
 import { useAdminAccess } from '../hooks/useAdminAccess'
 import type { Player } from '../types'
 
@@ -47,6 +48,8 @@ export default function LiveScoring() {
   // UI state
   const [showWicket, setShowWicket] = useState(false)
   const [overEndState, setOverEndState] = useState<OverEndState>('idle')
+  const [showHistory, setShowHistory] = useState(false)
+  const [editingDelivery, setEditingDelivery] = useState<Delivery | null>(null)
   const [nextBowlerId, setNextBowlerId] = useState('')
   const [showNextBatter, setShowNextBatter] = useState(false)
   const [nextBatterId, setNextBatterId] = useState('')
@@ -323,6 +326,60 @@ export default function LiveScoring() {
     }
   }
 
+  async function handleEditDelivery(deliveryId: string, changes: Partial<Delivery>) {
+    if (!innings) return
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('deliveries').update({
+        batter_runs: changes.batter_runs,
+        extra_runs: changes.extra_runs,
+        total_runs: changes.total_runs,
+        extra_type: changes.extra_type,
+        is_legal: changes.is_legal,
+        is_wicket: changes.is_wicket,
+        wicket_type: changes.wicket_type,
+        is_free_hit: changes.is_free_hit,
+      }).eq('id', deliveryId)
+      if (error) throw error
+
+      // Reload all deliveries and recompute
+      const { data: raw } = await supabase
+        .from('deliveries').select('*')
+        .eq('innings_id', innings.id)
+        .order('over_number', { ascending: true })
+        .order('ball_number', { ascending: true })
+
+      const mapped = (raw ?? []).map((d) => ({
+        id: d.id as string,
+        over_number: d.over_number as number,
+        ball_number: d.ball_number as number,
+        striker_id: d.striker_id as string,
+        non_striker_id: d.non_striker_id as string,
+        bowler_id: d.bowler_id as string,
+        batter_runs: d.batter_runs as number,
+        extra_runs: d.extra_runs as number,
+        total_runs: d.total_runs as number,
+        extra_type: d.extra_type as any,
+        is_free_hit: d.is_free_hit as boolean,
+        is_wicket: d.is_wicket as boolean,
+        wicket_type: d.wicket_type as any,
+        dismissed_player_id: d.dismissed_player_id as string | null,
+        fielder_id: d.fielder_id as string | null,
+        is_legal: d.is_legal as boolean,
+      })) as Delivery[]
+
+      setDeliveries(mapped)
+      const computed = computeInningsState(mapped, battingPlayers.length, innings.overs_limit, innings.target)
+      setState(computed)
+      setEditingDelivery(null)
+      setShowHistory(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Edit failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleInningsComplete(totalRuns: number) {
     if (!innings || !matchId) return
     await completeInnings(innings.id, totalRuns)
@@ -475,6 +532,12 @@ export default function LiveScoring() {
         <div className="flex items-start justify-between mb-1">
           <Link to={`/match/${matchId}`} className="text-zinc-500 text-xs">← Match</Link>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowHistory(true)}
+              className="text-xs text-zinc-300 border border-zinc-700 rounded px-2 py-1"
+            >
+              ✏️ Edit
+            </button>
             <Link
               to={`/match/${matchId}/scorecard`}
               className="text-xs text-zinc-300 border border-zinc-700 rounded px-2 py-1"
@@ -891,6 +954,61 @@ export default function LiveScoring() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit History Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex flex-col" onClick={() => setShowHistory(false)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-t-2xl w-full max-w-lg mx-auto mt-auto max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-zinc-900 px-5 pt-5 pb-3 border-b border-zinc-800 flex items-center justify-between">
+              <h3 className="text-white font-semibold">Edit Ball History</h3>
+              <button onClick={() => setShowHistory(false)} className="text-zinc-500">✕</button>
+            </div>
+            <div className="px-4 py-3">
+              {Array.from(new Set(deliveries.map((d) => d.over_number))).sort((a, b) => a - b).map((overNum) => {
+                const overDeliveries = deliveries.filter((d) => d.over_number === overNum)
+                return (
+                  <div key={overNum} className="mb-4">
+                    <p className="text-xs text-zinc-500 font-semibold mb-2">Over {overNum + 1}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {overDeliveries.map((d, i) => {
+                        const isWide = d.extra_type === 'wide'
+                        const isNoBall = d.extra_type === 'no_ball'
+                        const isBye = d.extra_type === 'bye'
+                        const isLegBye = d.extra_type === 'leg_bye'
+                        let label = d.is_wicket ? 'W' : isBye ? `B${d.extra_runs}` : isLegBye ? `LB${d.extra_runs}` : isWide ? 'wd' : isNoBall ? 'nb' : String(d.total_runs)
+                        return (
+                          <button key={d.id} onClick={() => setEditingDelivery(d)}
+                            className={`w-10 h-10 rounded-lg text-xs font-bold border flex items-center justify-center ${
+                              d.is_wicket ? 'bg-red-500/20 border-red-500 text-red-400' :
+                              isWide || isNoBall ? 'bg-zinc-700 border-zinc-600 text-zinc-300' :
+                              isBye || isLegBye ? 'bg-blue-500/20 border-blue-500 text-blue-400' :
+                              d.total_runs >= 4 ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' :
+                              'bg-zinc-800 border-zinc-700 text-zinc-300'
+                            }`}>
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+              {deliveries.length === 0 && <p className="text-zinc-500 text-sm text-center py-4">No deliveries yet</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Delivery Modal */}
+      {editingDelivery && (
+        <EditDeliveryModal
+          delivery={editingDelivery}
+          overNumber={editingDelivery.over_number}
+          ballIndex={editingDelivery.ball_number}
+          onSave={(changes) => handleEditDelivery(editingDelivery.id, changes)}
+          onClose={() => setEditingDelivery(null)}
+        />
       )}
     </div>
   )
