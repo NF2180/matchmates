@@ -827,13 +827,7 @@ export default function LiveScoring() {
           nonStriker={nonStriker}
           fieldingPlayers={bowlingPlayers}
           wicketKeeperId={wicketKeeperId}
-          allowedTypes={
-            cs.next_ball_is_free_hit
-              ? ['run_out']
-              : extraBallPicker === 'no_ball'
-                ? ['run_out']
-                : ['run_out', 'stumped']
-          }
+          allowedTypes={['run_out', 'stumped', 'caught', 'hit_wicket', 'retired_hurt']}
           runsLabel={extraBallPicker === 'wide' ? 'Runs taken (byes) before the wicket' : 'Runs off the bat before the wicket'}
           onConfirm={handleExtraBallWicketResult}
           onCancel={() => setExtraBallWicket(false)}
